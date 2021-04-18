@@ -1,0 +1,815 @@
+{
+  "history": [
+    {
+      "name": "rhtnrfaemi",
+      "type": "FINALIZE_IN",
+      "out_idx": 0,
+      "parent_tx_hash": null,
+      "parent_out_idx": null,
+      "transaction": {
+        "hash": "9dcd4c72cb9ab6a68c9c7a2057971a5a5939ed2f479fe42006a9cdf862bcf5fc",
+        "height": 53,
+        "block": "000c28b9ce8ac1d2387d40c20d9d791bf9e7b726e32c5623d84b69b6c3a96e60",
+        "time": 1622680636,
+        "index": 3,
+        "version": 0,
+        "inputs": [
+          {
+            "prevout": {
+              "hash": "f53b0a49f66059095ddfa47adab7e477dc1306c93880a4ddd622344351c9d23e",
+              "index": 0
+            },
+            "witness": [
+              "e3ba4ba6232bad2e055428066fe12f115f489e88be87211fae199debb5bdc2897801647390d7264cdff5be2a990a3ac79655991d769da97d43f85f989d3e404001",
+              "03911bc88d289099017488b75088cad3bc1397ef5602a1f0f135b763d936084908"
+            ],
+            "sequence": 4294967295,
+            "coin": null
+          },
+          {
+            "prevout": {
+              "hash": "f53b0a49f66059095ddfa47adab7e477dc1306c93880a4ddd622344351c9d23e",
+              "index": 1
+            },
+            "witness": [
+              "2fe729af4b53335fc8ad77b56c5531c2913d426d784816bb2bfb9e966dd1225c2c65f48fbc5d7d62844ee00d0625cf12785ed4e334afb17368b79241d886d19d01",
+              "0204218dff558682ac8077197445bded4227491e54e2eb748ad4226b2cdd54e9c1"
+            ],
+            "sequence": 4294967295,
+            "coin": null
+          }
+        ],
+        "outputs": [
+          {
+            "value": 400000000,
+            "address": {
+              "address": "rs1qfvgr7evz60yrvavlwmhhgs3sh6rg5qdtslzny2",
+              "derivation": "m/0/0",
+              "own": true
+            },
+            "covenant": {
+              "type": 10,
+              "action": "FINALIZE",
+              "items": [
+                "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                "0b000000",
+                "7268746e726661656d69",
+                "00",
+                "00000000",
+                "00000000",
+                "ae3895cf597eff05b19e02a70ceeeecb9dc72dbfe6504a50e9343a72f06a87c5"
+              ]
+            }
+          },
+          {
+            "value": 198974480,
+            "address": {
+              "address": "rs1q39ly7mn4473wc28jjcj8xr0vmzej3w3z7u8ds8",
+              "derivation": null,
+              "own": false
+            },
+            "covenant": {
+              "type": 0,
+              "action": "NONE",
+              "items": []
+            }
+          }
+        ],
+        "hex": "0000000002f53b0a49f66059095ddfa47adab7e477dc1306c93880a4ddd622344351c9d23e00000000fffffffff53b0a49f66059095ddfa47adab7e477dc1306c93880a4ddd622344351c9d23e01000000ffffffff020084d7170000000000144b103f6582d3c836759f76ef744230be868a01ab0a07209e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0040b0000000a7268746e726661656d6901000400000000040000000020ae3895cf597eff05b19e02a70ceeeecb9dc72dbfe6504a50e9343a72f06a87c5101cdc0b000000000014897e4f6e75afa2ec28f29624730decd8b328ba220000000000000241e3ba4ba6232bad2e055428066fe12f115f489e88be87211fae199debb5bdc2897801647390d7264cdff5be2a990a3ac79655991d769da97d43f85f989d3e4040012103911bc88d289099017488b75088cad3bc1397ef5602a1f0f135b763d93608490802412fe729af4b53335fc8ad77b56c5531c2913d426d784816bb2bfb9e966dd1225c2c65f48fbc5d7d62844ee00d0625cf12785ed4e334afb17368b79241d886d19d01210204218dff558682ac8077197445bded4227491e54e2eb748ad4226b2cdd54e9c1",
+        "fee": 0
+      }
+    },
+    {
+      "name": "rhtnrfaemi",
+      "type": "REDEEM",
+      "out_idx": 0,
+      "parent_tx_hash": "14ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f8",
+      "parent_out_idx": 0,
+      "transaction": {
+        "hash": "0b80d0126e934eb19d340d8467064c2998eca6ae7ded4a2b15ca7c889b472a96",
+        "height": 40,
+        "block": "527500c270f91b1c8c106a769f84506da69ce65371e85dd2319c2870fef49ad3",
+        "time": 1622680634,
+        "index": 1,
+        "version": 0,
+        "inputs": [
+          {
+            "prevout": {
+              "hash": "14ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f8",
+              "index": 0
+            },
+            "witness": [
+              "2a58992eb1011edcec729d4567752bc72e5035eaf3f7dbe0dc346a6cd1d950795d4cc70863c963d081e6d23f9ddc935479f5ae031d2b4064e3352a286310b0a201",
+              "02afe7668717eb0308d595d824c7fc41fee7132f89fcd81ecb0c53faddff13d280"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 30,
+              "value": 400000000,
+              "address": {
+                "address": "rs1qdg26qeg66s2cskg20vjwcwhlwnkl9lnvvspd7a",
+                "derivation": "m/0/7",
+                "own": true
+              },
+              "covenant": {
+                "type": 4,
+                "action": "REVEAL",
+                "items": [
+                  "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                  "0b000000",
+                  "219cfd93a9694c25bf9e49fff64bf3b475c0fc8e184d67daebe3446c3122b809"
+                ]
+              },
+              "coinbase": false
+            }
+          },
+          {
+            "prevout": {
+              "hash": "14ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f8",
+              "index": 1
+            },
+            "witness": [
+              "7bf52c5be6e97f9ea9f37c5cebe074360af338a10d55c74bec4d17e7a5f099f868d36cef02d76875681b6f9bf4de92ea249f9f7391ba2ebdff8e5d8921d1193101",
+              "03106cd030f11421033937267bef8ef3df8e219278e33e212025c0c0df8e23aea0"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 30,
+              "value": 300000000,
+              "address": {
+                "address": "rs1q5hrv54dard469k8w5wrhd92emcxjf4hlakf8fp",
+                "derivation": "m/0/6",
+                "own": true
+              },
+              "covenant": {
+                "type": 4,
+                "action": "REVEAL",
+                "items": [
+                  "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                  "0b000000",
+                  "2c8fcbe6481c3ac650fb86215318cb05e0bf03917d2adde3c76b888f34536b4f"
+                ]
+              },
+              "coinbase": false
+            }
+          },
+          {
+            "prevout": {
+              "hash": "f2da8ca73d212f4400ad671f99695c988d351c022f2b949d1c022e9d9c54fe24",
+              "index": 0
+            },
+            "witness": [
+              "a895aa36d63cc8f4b37c3e0740f3111c0261722cf024058dc9bc605d00dc624f7471cc2b4df0957906223dc43d2df657d55f1e3b4d9f6fbcdcb1ec23bd3f8b7501",
+              "02cf023adb0feb74b43d4d7dbdf4acbcdf99f99b0cda64665ce0457618d9bce695"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 10,
+              "value": 2000000000,
+              "address": {
+                "address": "rs1qfvgr7evz60yrvavlwmhhgs3sh6rg5qdtslzny2",
+                "derivation": "m/0/0",
+                "own": true
+              },
+              "covenant": {
+                "type": 0,
+                "action": "NONE",
+                "items": []
+              },
+              "coinbase": true
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "value": 400000000,
+            "address": {
+              "address": "rs1qdg26qeg66s2cskg20vjwcwhlwnkl9lnvvspd7a",
+              "derivation": "m/0/7",
+              "own": true
+            },
+            "covenant": {
+              "type": 5,
+              "action": "REDEEM",
+              "items": [
+                "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                "0b000000"
+              ]
+            }
+          },
+          {
+            "value": 300000000,
+            "address": {
+              "address": "rs1q5hrv54dard469k8w5wrhd92emcxjf4hlakf8fp",
+              "derivation": "m/0/6",
+              "own": true
+            },
+            "covenant": {
+              "type": 5,
+              "action": "REDEEM",
+              "items": [
+                "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                "0b000000"
+              ]
+            }
+          },
+          {
+            "value": 1999992400,
+            "address": {
+              "address": "rs1q8k0k2pn5w6jt7f40sj7xgmwtwn5x584tz47q2v",
+              "derivation": "m/1/12",
+              "own": true
+            },
+            "covenant": {
+              "type": 0,
+              "action": "NONE",
+              "items": []
+            }
+          }
+        ],
+        "hex": "000000000314ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f800000000ffffffff14ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f801000000fffffffff2da8ca73d212f4400ad671f99695c988d351c022f2b949d1c022e9d9c54fe2400000000ffffffff030084d7170000000000146a15a0651ad41588590a7b24ec3aff74edf2fe6c0502209e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0040b00000000a3e111000000000014a5c6ca55bd1b6ba2d8eea387769559de0d24d6ff0502209e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0040b000000507635770000000000143d9f65067476a4bf26af84bc646dcb74e86a1eab00000000000002412a58992eb1011edcec729d4567752bc72e5035eaf3f7dbe0dc346a6cd1d950795d4cc70863c963d081e6d23f9ddc935479f5ae031d2b4064e3352a286310b0a2012102afe7668717eb0308d595d824c7fc41fee7132f89fcd81ecb0c53faddff13d28002417bf52c5be6e97f9ea9f37c5cebe074360af338a10d55c74bec4d17e7a5f099f868d36cef02d76875681b6f9bf4de92ea249f9f7391ba2ebdff8e5d8921d11931012103106cd030f11421033937267bef8ef3df8e219278e33e212025c0c0df8e23aea00241a895aa36d63cc8f4b37c3e0740f3111c0261722cf024058dc9bc605d00dc624f7471cc2b4df0957906223dc43d2df657d55f1e3b4d9f6fbcdcb1ec23bd3f8b75012102cf023adb0feb74b43d4d7dbdf4acbcdf99f99b0cda64665ce0457618d9bce695",
+        "fee": 7600
+      }
+    },
+    {
+      "name": "rhtnrfaemi",
+      "type": "REDEEM",
+      "out_idx": 1,
+      "parent_tx_hash": "14ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f8",
+      "parent_out_idx": 1,
+      "transaction": {
+        "hash": "0b80d0126e934eb19d340d8467064c2998eca6ae7ded4a2b15ca7c889b472a96",
+        "height": 40,
+        "block": "527500c270f91b1c8c106a769f84506da69ce65371e85dd2319c2870fef49ad3",
+        "time": 1622680634,
+        "index": 1,
+        "version": 0,
+        "inputs": [
+          {
+            "prevout": {
+              "hash": "14ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f8",
+              "index": 0
+            },
+            "witness": [
+              "2a58992eb1011edcec729d4567752bc72e5035eaf3f7dbe0dc346a6cd1d950795d4cc70863c963d081e6d23f9ddc935479f5ae031d2b4064e3352a286310b0a201",
+              "02afe7668717eb0308d595d824c7fc41fee7132f89fcd81ecb0c53faddff13d280"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 30,
+              "value": 400000000,
+              "address": {
+                "address": "rs1qdg26qeg66s2cskg20vjwcwhlwnkl9lnvvspd7a",
+                "derivation": "m/0/7",
+                "own": true
+              },
+              "covenant": {
+                "type": 4,
+                "action": "REVEAL",
+                "items": [
+                  "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                  "0b000000",
+                  "219cfd93a9694c25bf9e49fff64bf3b475c0fc8e184d67daebe3446c3122b809"
+                ]
+              },
+              "coinbase": false
+            }
+          },
+          {
+            "prevout": {
+              "hash": "14ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f8",
+              "index": 1
+            },
+            "witness": [
+              "7bf52c5be6e97f9ea9f37c5cebe074360af338a10d55c74bec4d17e7a5f099f868d36cef02d76875681b6f9bf4de92ea249f9f7391ba2ebdff8e5d8921d1193101",
+              "03106cd030f11421033937267bef8ef3df8e219278e33e212025c0c0df8e23aea0"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 30,
+              "value": 300000000,
+              "address": {
+                "address": "rs1q5hrv54dard469k8w5wrhd92emcxjf4hlakf8fp",
+                "derivation": "m/0/6",
+                "own": true
+              },
+              "covenant": {
+                "type": 4,
+                "action": "REVEAL",
+                "items": [
+                  "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                  "0b000000",
+                  "2c8fcbe6481c3ac650fb86215318cb05e0bf03917d2adde3c76b888f34536b4f"
+                ]
+              },
+              "coinbase": false
+            }
+          },
+          {
+            "prevout": {
+              "hash": "f2da8ca73d212f4400ad671f99695c988d351c022f2b949d1c022e9d9c54fe24",
+              "index": 0
+            },
+            "witness": [
+              "a895aa36d63cc8f4b37c3e0740f3111c0261722cf024058dc9bc605d00dc624f7471cc2b4df0957906223dc43d2df657d55f1e3b4d9f6fbcdcb1ec23bd3f8b7501",
+              "02cf023adb0feb74b43d4d7dbdf4acbcdf99f99b0cda64665ce0457618d9bce695"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 10,
+              "value": 2000000000,
+              "address": {
+                "address": "rs1qfvgr7evz60yrvavlwmhhgs3sh6rg5qdtslzny2",
+                "derivation": "m/0/0",
+                "own": true
+              },
+              "covenant": {
+                "type": 0,
+                "action": "NONE",
+                "items": []
+              },
+              "coinbase": true
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "value": 400000000,
+            "address": {
+              "address": "rs1qdg26qeg66s2cskg20vjwcwhlwnkl9lnvvspd7a",
+              "derivation": "m/0/7",
+              "own": true
+            },
+            "covenant": {
+              "type": 5,
+              "action": "REDEEM",
+              "items": [
+                "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                "0b000000"
+              ]
+            }
+          },
+          {
+            "value": 300000000,
+            "address": {
+              "address": "rs1q5hrv54dard469k8w5wrhd92emcxjf4hlakf8fp",
+              "derivation": "m/0/6",
+              "own": true
+            },
+            "covenant": {
+              "type": 5,
+              "action": "REDEEM",
+              "items": [
+                "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                "0b000000"
+              ]
+            }
+          },
+          {
+            "value": 1999992400,
+            "address": {
+              "address": "rs1q8k0k2pn5w6jt7f40sj7xgmwtwn5x584tz47q2v",
+              "derivation": "m/1/12",
+              "own": true
+            },
+            "covenant": {
+              "type": 0,
+              "action": "NONE",
+              "items": []
+            }
+          }
+        ],
+        "hex": "000000000314ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f800000000ffffffff14ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f801000000fffffffff2da8ca73d212f4400ad671f99695c988d351c022f2b949d1c022e9d9c54fe2400000000ffffffff030084d7170000000000146a15a0651ad41588590a7b24ec3aff74edf2fe6c0502209e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0040b00000000a3e111000000000014a5c6ca55bd1b6ba2d8eea387769559de0d24d6ff0502209e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0040b000000507635770000000000143d9f65067476a4bf26af84bc646dcb74e86a1eab00000000000002412a58992eb1011edcec729d4567752bc72e5035eaf3f7dbe0dc346a6cd1d950795d4cc70863c963d081e6d23f9ddc935479f5ae031d2b4064e3352a286310b0a2012102afe7668717eb0308d595d824c7fc41fee7132f89fcd81ecb0c53faddff13d28002417bf52c5be6e97f9ea9f37c5cebe074360af338a10d55c74bec4d17e7a5f099f868d36cef02d76875681b6f9bf4de92ea249f9f7391ba2ebdff8e5d8921d11931012103106cd030f11421033937267bef8ef3df8e219278e33e212025c0c0df8e23aea00241a895aa36d63cc8f4b37c3e0740f3111c0261722cf024058dc9bc605d00dc624f7471cc2b4df0957906223dc43d2df657d55f1e3b4d9f6fbcdcb1ec23bd3f8b75012102cf023adb0feb74b43d4d7dbdf4acbcdf99f99b0cda64665ce0457618d9bce695",
+        "fee": 7600
+      }
+    },
+    {
+      "name": "rhtnrfaemi",
+      "type": "REVEAL",
+      "out_idx": 0,
+      "parent_tx_hash": "375af9401cca41607d0e3b30a0aa8c740d73e322ec99e35a4315e4fcb2c9f0ea",
+      "parent_out_idx": 0,
+      "transaction": {
+        "hash": "14ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f8",
+        "height": 30,
+        "block": "271681e08a26a85b8cd75b67047301bef0d12647de78ac7f9767e2cec8ffaf53",
+        "time": 1622680632,
+        "index": 1,
+        "version": 0,
+        "inputs": [
+          {
+            "prevout": {
+              "hash": "375af9401cca41607d0e3b30a0aa8c740d73e322ec99e35a4315e4fcb2c9f0ea",
+              "index": 0
+            },
+            "witness": [
+              "4c2fc8df23acdce9731d59fc374e193b9acd94c12b77499cbd6c89febfec5aa957caf45e651d8e005de2e5e7218dda2ea62117c807533a79d82084df82a0e93a01",
+              "02afe7668717eb0308d595d824c7fc41fee7132f89fcd81ecb0c53faddff13d280"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 19,
+              "value": 600000000,
+              "address": {
+                "address": "rs1qdg26qeg66s2cskg20vjwcwhlwnkl9lnvvspd7a",
+                "derivation": "m/0/7",
+                "own": true
+              },
+              "covenant": {
+                "type": 3,
+                "action": "BID",
+                "items": [
+                  "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                  "0b000000",
+                  "7268746e726661656d69",
+                  "9db8772ac8d209deeb1c09715b4c22a9825b114df96bc4d52c858b33ac889747"
+                ]
+              },
+              "coinbase": false
+            }
+          },
+          {
+            "prevout": {
+              "hash": "dd0b4bb5ace6d4835981d6ed8bd8d14ba8fe0eec6f1608cde97ece50e0ef8448",
+              "index": 0
+            },
+            "witness": [
+              "02e173516c574794bc70251f919efb744dffd0599f83c7cbab55eef13ac2855105da66c088dfe36a57b24b345cf838b26645517f474f0ccfee944aa2e3b966e801",
+              "03106cd030f11421033937267bef8ef3df8e219278e33e212025c0c0df8e23aea0"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 19,
+              "value": 400000000,
+              "address": {
+                "address": "rs1q5hrv54dard469k8w5wrhd92emcxjf4hlakf8fp",
+                "derivation": "m/0/6",
+                "own": true
+              },
+              "covenant": {
+                "type": 3,
+                "action": "BID",
+                "items": [
+                  "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                  "0b000000",
+                  "7268746e726661656d69",
+                  "5f183a77aae5ada204d1cbcb48273f7733936e19e7b94461e6dca6a83c6035a4"
+                ]
+              },
+              "coinbase": false
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "value": 400000000,
+            "address": {
+              "address": "rs1qdg26qeg66s2cskg20vjwcwhlwnkl9lnvvspd7a",
+              "derivation": "m/0/7",
+              "own": true
+            },
+            "covenant": {
+              "type": 4,
+              "action": "REVEAL",
+              "items": [
+                "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                "0b000000",
+                "219cfd93a9694c25bf9e49fff64bf3b475c0fc8e184d67daebe3446c3122b809"
+              ]
+            }
+          },
+          {
+            "value": 300000000,
+            "address": {
+              "address": "rs1q5hrv54dard469k8w5wrhd92emcxjf4hlakf8fp",
+              "derivation": "m/0/6",
+              "own": true
+            },
+            "covenant": {
+              "type": 4,
+              "action": "REVEAL",
+              "items": [
+                "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                "0b000000",
+                "2c8fcbe6481c3ac650fb86215318cb05e0bf03917d2adde3c76b888f34536b4f"
+              ]
+            }
+          },
+          {
+            "value": 299992400,
+            "address": {
+              "address": "rs1q2ms8g0lekgtvwfe5z2rtlzz6l9s70fw7reqk8t",
+              "derivation": "m/1/10",
+              "own": true
+            },
+            "covenant": {
+              "type": 0,
+              "action": "NONE",
+              "items": []
+            }
+          }
+        ],
+        "hex": "0000000002375af9401cca41607d0e3b30a0aa8c740d73e322ec99e35a4315e4fcb2c9f0ea00000000ffffffffdd0b4bb5ace6d4835981d6ed8bd8d14ba8fe0eec6f1608cde97ece50e0ef844800000000ffffffff030084d7170000000000146a15a0651ad41588590a7b24ec3aff74edf2fe6c0403209e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0040b00000020219cfd93a9694c25bf9e49fff64bf3b475c0fc8e184d67daebe3446c3122b80900a3e111000000000014a5c6ca55bd1b6ba2d8eea387769559de0d24d6ff0403209e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0040b000000202c8fcbe6481c3ac650fb86215318cb05e0bf03917d2adde3c76b888f34536b4f5085e11100000000001456e0743ff9b216c727341286bf885af961e7a5de00000000000002414c2fc8df23acdce9731d59fc374e193b9acd94c12b77499cbd6c89febfec5aa957caf45e651d8e005de2e5e7218dda2ea62117c807533a79d82084df82a0e93a012102afe7668717eb0308d595d824c7fc41fee7132f89fcd81ecb0c53faddff13d280024102e173516c574794bc70251f919efb744dffd0599f83c7cbab55eef13ac2855105da66c088dfe36a57b24b345cf838b26645517f474f0ccfee944aa2e3b966e8012103106cd030f11421033937267bef8ef3df8e219278e33e212025c0c0df8e23aea0",
+        "fee": 7600
+      }
+    },
+    {
+      "name": "rhtnrfaemi",
+      "type": "REVEAL",
+      "out_idx": 1,
+      "parent_tx_hash": "dd0b4bb5ace6d4835981d6ed8bd8d14ba8fe0eec6f1608cde97ece50e0ef8448",
+      "parent_out_idx": 0,
+      "transaction": {
+        "hash": "14ef34e9411480fa8d2c9f5a68a910804bc94dd15ddaee76df8536aabf5ff9f8",
+        "height": 30,
+        "block": "271681e08a26a85b8cd75b67047301bef0d12647de78ac7f9767e2cec8ffaf53",
+        "time": 1622680632,
+        "index": 1,
+        "version": 0,
+        "inputs": [
+          {
+            "prevout": {
+              "hash": "375af9401cca41607d0e3b30a0aa8c740d73e322ec99e35a4315e4fcb2c9f0ea",
+              "index": 0
+            },
+            "witness": [
+              "4c2fc8df23acdce9731d59fc374e193b9acd94c12b77499cbd6c89febfec5aa957caf45e651d8e005de2e5e7218dda2ea62117c807533a79d82084df82a0e93a01",
+              "02afe7668717eb0308d595d824c7fc41fee7132f89fcd81ecb0c53faddff13d280"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 19,
+              "value": 600000000,
+              "address": {
+                "address": "rs1qdg26qeg66s2cskg20vjwcwhlwnkl9lnvvspd7a",
+                "derivation": "m/0/7",
+                "own": true
+              },
+              "covenant": {
+                "type": 3,
+                "action": "BID",
+                "items": [
+                  "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                  "0b000000",
+                  "7268746e726661656d69",
+                  "9db8772ac8d209deeb1c09715b4c22a9825b114df96bc4d52c858b33ac889747"
+                ]
+              },
+              "coinbase": false
+            }
+          },
+          {
+            "prevout": {
+              "hash": "dd0b4bb5ace6d4835981d6ed8bd8d14ba8fe0eec6f1608cde97ece50e0ef8448",
+              "index": 0
+            },
+            "witness": [
+              "02e173516c574794bc70251f919efb744dffd0599f83c7cbab55eef13ac2855105da66c088dfe36a57b24b345cf838b26645517f474f0ccfee944aa2e3b966e801",
+              "03106cd030f11421033937267bef8ef3df8e219278e33e212025c0c0df8e23aea0"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 19,
+              "value": 400000000,
+              "address": {
+                "address": "rs1q5hrv54dard469k8w5wrhd92emcxjf4hlakf8fp",
+                "derivation": "m/0/6",
+                "own": true
+              },
+              "covenant": {
+                "type": 3,
+                "action": "BID",
+                "items": [
+                  "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                  "0b000000",
+                  "7268746e726661656d69",
+                  "5f183a77aae5ada204d1cbcb48273f7733936e19e7b94461e6dca6a83c6035a4"
+                ]
+              },
+              "coinbase": false
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "value": 400000000,
+            "address": {
+              "address": "rs1qdg26qeg66s2cskg20vjwcwhlwnkl9lnvvspd7a",
+              "derivation": "m/0/7",
+              "own": true
+            },
+            "covenant": {
+              "type": 4,
+              "action": "REVEAL",
+              "items": [
+                "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                "0b000000",
+                "219cfd93a9694c25bf9e49fff64bf3b475c0fc8e184d67daebe3446c3122b809"
+              ]
+            }
+          },
+          {
+            "value": 300000000,
+            "address": {
+              "address": "rs1q5hrv54dard469k8w5wrhd92emcxjf4hlakf8fp",
+              "derivation": "m/0/6",
+              "own": true
+            },
+            "covenant": {
+              "type": 4,
+              "action": "REVEAL",
+              "items": [
+                "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                "0b000000",
+                "2c8fcbe6481c3ac650fb86215318cb05e0bf03917d2adde3c76b888f34536b4f"
+              ]
+            }
+          },
+          {
+            "value": 299992400,
+            "address": {
+              "address": "rs1q2ms8g0lekgtvwfe5z2rtlzz6l9s70fw7reqk8t",
+              "derivation": "m/1/10",
+              "own": true
+            },
+            "covenant": {
+              "type": 0,
+              "action": "NONE",
+              "items": []
+            }
+          }
+        ],
+        "hex": "0000000002375af9401cca41607d0e3b30a0aa8c740d73e322ec99e35a4315e4fcb2c9f0ea00000000ffffffffdd0b4bb5ace6d4835981d6ed8bd8d14ba8fe0eec6f1608cde97ece50e0ef844800000000ffffffff030084d7170000000000146a15a0651ad41588590a7b24ec3aff74edf2fe6c0403209e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0040b00000020219cfd93a9694c25bf9e49fff64bf3b475c0fc8e184d67daebe3446c3122b80900a3e111000000000014a5c6ca55bd1b6ba2d8eea387769559de0d24d6ff0403209e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0040b000000202c8fcbe6481c3ac650fb86215318cb05e0bf03917d2adde3c76b888f34536b4f5085e11100000000001456e0743ff9b216c727341286bf885af961e7a5de00000000000002414c2fc8df23acdce9731d59fc374e193b9acd94c12b77499cbd6c89febfec5aa957caf45e651d8e005de2e5e7218dda2ea62117c807533a79d82084df82a0e93a012102afe7668717eb0308d595d824c7fc41fee7132f89fcd81ecb0c53faddff13d280024102e173516c574794bc70251f919efb744dffd0599f83c7cbab55eef13ac2855105da66c088dfe36a57b24b345cf838b26645517f474f0ccfee944aa2e3b966e8012103106cd030f11421033937267bef8ef3df8e219278e33e212025c0c0df8e23aea0",
+        "fee": 7600
+      }
+    },
+    {
+      "name": "rhtnrfaemi",
+      "type": "BID",
+      "out_idx": 0,
+      "parent_tx_hash": null,
+      "parent_out_idx": null,
+      "transaction": {
+        "hash": "dd0b4bb5ace6d4835981d6ed8bd8d14ba8fe0eec6f1608cde97ece50e0ef8448",
+        "height": 19,
+        "block": "14db0c79d9348b6868b5b84f3cd229bff69bac5a1954256de7d1d162a7818877",
+        "time": 1622680630,
+        "index": 1,
+        "version": 0,
+        "inputs": [
+          {
+            "prevout": {
+              "hash": "8df80be9569b648e440df8e25dd1ac6c540b4b8c3e70cf5da1f5411b97c26c2c",
+              "index": 0
+            },
+            "witness": [
+              "9f641630f39880934451d8887bdd73b1800af7b9c115e40bf937162983dcf21511b3b5326e8066222d1bcc668bc14e65c15c459be99420cdba289790cedb1a3f01",
+              "02cf023adb0feb74b43d4d7dbdf4acbcdf99f99b0cda64665ce0457618d9bce695"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 1,
+              "value": 2000000000,
+              "address": {
+                "address": "rs1qfvgr7evz60yrvavlwmhhgs3sh6rg5qdtslzny2",
+                "derivation": "m/0/0",
+                "own": true
+              },
+              "covenant": {
+                "type": 0,
+                "action": "NONE",
+                "items": []
+              },
+              "coinbase": true
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "value": 400000000,
+            "address": {
+              "address": "rs1q5hrv54dard469k8w5wrhd92emcxjf4hlakf8fp",
+              "derivation": "m/0/6",
+              "own": true
+            },
+            "covenant": {
+              "type": 3,
+              "action": "BID",
+              "items": [
+                "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                "0b000000",
+                "7268746e726661656d69",
+                "5f183a77aae5ada204d1cbcb48273f7733936e19e7b94461e6dca6a83c6035a4"
+              ]
+            }
+          },
+          {
+            "value": 1599995560,
+            "address": {
+              "address": "rs1q6vpvf3mkunsqxlm3u06ufxx0verudmgvdpghut",
+              "derivation": "m/1/6",
+              "own": true
+            },
+            "covenant": {
+              "type": 0,
+              "action": "NONE",
+              "items": []
+            }
+          }
+        ],
+        "hex": "00000000018df80be9569b648e440df8e25dd1ac6c540b4b8c3e70cf5da1f5411b97c26c2c00000000ffffffff020084d717000000000014a5c6ca55bd1b6ba2d8eea387769559de0d24d6ff0304209e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0040b0000000a7268746e726661656d69205f183a77aae5ada204d1cbcb48273f7733936e19e7b94461e6dca6a83c6035a4a8fe5d5f000000000014d302c4c776e4e0037f71e3f5c498cf6647c6ed0c00000000000002419f641630f39880934451d8887bdd73b1800af7b9c115e40bf937162983dcf21511b3b5326e8066222d1bcc668bc14e65c15c459be99420cdba289790cedb1a3f012102cf023adb0feb74b43d4d7dbdf4acbcdf99f99b0cda64665ce0457618d9bce695",
+        "fee": 4440
+      }
+    },
+    {
+      "name": "rhtnrfaemi",
+      "type": "BID",
+      "out_idx": 0,
+      "parent_tx_hash": null,
+      "parent_out_idx": null,
+      "transaction": {
+        "hash": "375af9401cca41607d0e3b30a0aa8c740d73e322ec99e35a4315e4fcb2c9f0ea",
+        "height": 19,
+        "block": "14db0c79d9348b6868b5b84f3cd229bff69bac5a1954256de7d1d162a7818877",
+        "time": 1622680630,
+        "index": 2,
+        "version": 0,
+        "inputs": [
+          {
+            "prevout": {
+              "hash": "a29f1dab4a9089522fd8d39fabdad96a1dbb3854bca9b9ff04f2b9f79eb00c53",
+              "index": 0
+            },
+            "witness": [
+              "24a9cf81983a4fedaacfc9868d573b68844bf137a715d6df7260832e738a103e613885114763716455f6377a610bbfcf17c95b828a24e720b651c5ecf8ac0c2d01",
+              "02cf023adb0feb74b43d4d7dbdf4acbcdf99f99b0cda64665ce0457618d9bce695"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 8,
+              "value": 2000000000,
+              "address": {
+                "address": "rs1qfvgr7evz60yrvavlwmhhgs3sh6rg5qdtslzny2",
+                "derivation": "m/0/0",
+                "own": true
+              },
+              "covenant": {
+                "type": 0,
+                "action": "NONE",
+                "items": []
+              },
+              "coinbase": true
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "value": 600000000,
+            "address": {
+              "address": "rs1qdg26qeg66s2cskg20vjwcwhlwnkl9lnvvspd7a",
+              "derivation": "m/0/7",
+              "own": true
+            },
+            "covenant": {
+              "type": 3,
+              "action": "BID",
+              "items": [
+                "9e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0",
+                "0b000000",
+                "7268746e726661656d69",
+                "9db8772ac8d209deeb1c09715b4c22a9825b114df96bc4d52c858b33ac889747"
+              ]
+            }
+          },
+          {
+            "value": 1399995560,
+            "address": {
+              "address": "rs1qs3yt2g9awd0eca8534reyyp77w57x24ft2qevz",
+              "derivation": "m/1/7",
+              "own": true
+            },
+            "covenant": {
+              "type": 0,
+              "action": "NONE",
+              "items": []
+            }
+          }
+        ],
+        "hex": "0000000001a29f1dab4a9089522fd8d39fabdad96a1dbb3854bca9b9ff04f2b9f79eb00c5300000000ffffffff020046c3230000000000146a15a0651ad41588590a7b24ec3aff74edf2fe6c0304209e5ab54dac4052ea6268bafb368fa612528f67706c2dcc5c969124cdcba7c8c0040b0000000a7268746e726661656d69209db8772ac8d209deeb1c09715b4c22a9825b114df96bc4d52c858b33ac889747a83c72530000000000148448b520bd735f9c74f48d4792103ef3a9e32aa9000000000000024124a9cf81983a4fedaacfc9868d573b68844bf137a715d6df7260832e738a103e613885114763716455f6377a610bbfcf17c95b828a24e720b651c5ecf8ac0c2d012102cf023adb0feb74b43d4d7dbdf4acbcdf99f99b0cda64665ce0457618d9bce695",
+        "fee": 4440
+      }
+    }
+  ]
+}

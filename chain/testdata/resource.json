@@ -1,0 +1,40 @@
+{
+  "ttl": 1234,
+  "records": [
+    {
+      "type": "DS",
+      "key_tag": 57355,
+      "algorithm": 8,
+      "digest_type": 2,
+      "digest": "95a57c3bab7849dbcddf7c72ada71a88146b141110318ca5be672057e865c3e2"
+    },
+    {
+      "type": "NS",
+      "ns": "ns1.hns."
+    },
+    {
+      "type": "GLUE4",
+      "ns": "ns2.hns.",
+      "address": "127.0.0.1"
+    },
+    {
+      "type": "GLUE6",
+      "ns": "ns2.hns.",
+      "address": "::1"
+    },
+    {
+      "type": "SYNTH4",
+      "address": "127.0.0.2"
+    },
+    {
+      "type": "SYNTH6",
+      "address": "::2"
+    },
+    {
+      "type": "TXT",
+      "txt": [
+        "hello world"
+      ]
+    }
+  ]
+}

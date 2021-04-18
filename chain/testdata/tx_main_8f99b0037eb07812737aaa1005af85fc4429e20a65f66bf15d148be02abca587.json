@@ -1,0 +1,34 @@
+{
+  "version": 0,
+  "vin": [
+    {
+      "prevout": {
+        "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "index": 4294967295
+      },
+      "sequence": 151839636
+    }
+  ],
+  "vout": [
+    {
+      "value": 2000111800,
+      "address": {
+        "version": 0,
+        "hash": "00bfb1e341bb84a68dd0bc1781c5ece5e5dc3282"
+      },
+      "covenant": {
+        "type": 0,
+        "action": "NONE",
+        "items": []
+      }
+    }
+  ],
+  "locktime": 10000,
+  "txinwitness": [
+    [
+      "6632706f6f6c",
+      "4dee1b281be020dc",
+      "0000000000000000"
+    ]
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "default",
+  "index": 0,
+  "wallet_name": "alice",
+  "balances": {
+    "available": 18849900180,
+    "immature": 0,
+    "bid_locked": 0,
+    "reveal_locked": 0,
+    "name_locked": 400000000
+  },
+  "address_depth": {
+    "receive": 9,
+    "change": 21
+  },
+  "lookahead_depth": {
+    "receive": 18,
+    "change": 30
+  },
+  "receive_address": "rs1qt8x08e9ypthpv5t9uz6wsg03zue4zr9ycxqd4j",
+  "change_address": "rs1q57nczcxlfk30p2rm2ywuafzem9u0x40tr5acy2",
+  "xpub": "rpubKBAyGDU8T8v2nZ214dwx4zooxV61JKWxoHWEFsPY8QvvTS96XWHrwHRcRDRHj8P5bcA1XTx4xm96GcgSsoHkDrVg1GdwyBoEPpEeo5e9RmzF",
+  "rescan_height": 53
+}
