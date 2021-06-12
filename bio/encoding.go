@@ -93,7 +93,7 @@ func WriteUint64LE(w io.Writer, n uint64) (int, error) {
 	return WriteRawBytes(w, b)
 }
 
-func Uint16BE(n uint16) ([]byte, ) {
+func Uint16BE(n uint16) []byte {
 	b := make([]byte, 2)
 	binary.BigEndian.PutUint16(b, n)
 	return b

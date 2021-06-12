@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/kurumiimari/gohan/chain"
 	"github.com/kurumiimari/gohan/client"
+	"github.com/kurumiimari/gohan/shakedex"
 	"github.com/kurumiimari/gohan/walletdb"
 	"github.com/pkg/errors"
 	"github.com/tyler-smith/go-bip39"
@@ -14,13 +15,13 @@ import (
 )
 
 type Node struct {
-	tmb     *tomb.Tomb
-	network *chain.Network
-	engine  *walletdb.Engine
-	client  *client.NodeRPCClient
-	bm      *BlockMonitor
-	wallets map[string]*Wallet
-	wMtx    sync.Mutex
+	tmb      *tomb.Tomb
+	network  *chain.Network
+	engine   *walletdb.Engine
+	client   *client.NodeRPCClient
+	bm       *BlockMonitor
+	accounts map[string]*Account
+	wMtx     sync.Mutex
 }
 
 type NodeStatus struct {
@@ -38,12 +39,12 @@ func NewNode(
 	bm *BlockMonitor,
 ) *Node {
 	return &Node{
-		tmb:     tmb,
-		network: network,
-		engine:  engine,
-		client:  client,
-		bm:      bm,
-		wallets: make(map[string]*Wallet),
+		tmb:      tmb,
+		network:  network,
+		engine:   engine,
+		client:   client,
+		bm:       bm,
+		accounts: make(map[string]*Account),
 	}
 }
 
@@ -63,13 +64,13 @@ func (s *Node) PollBlock() error {
 }
 
 func (s *Node) Start() error {
-	var wallets []*walletdb.Wallet
+	var accounts []*walletdb.AccountOpts
 	err := s.engine.Transaction(func(tx walletdb.Transactor) error {
-		w, err := walletdb.GetWallets(tx)
+		a, err := walletdb.GetAllAccounts(tx)
 		if err != nil {
 			return err
 		}
-		wallets = w
+		accounts = a
 		return nil
 	})
 	if err != nil {
@@ -77,136 +78,109 @@ func (s *Node) Start() error {
 	}
 
 	s.wMtx.Lock()
-	for _, w := range wallets {
-		dec, err := UnmarshalSecretBox([]byte(w.Seed))
-		if err != nil {
-			panic(err)
-		}
-
-		s.wallets[w.ID] = NewWallet(
+	for _, acc := range accounts {
+		s.accounts[acc.ID], err = NewAccount(
 			s.tmb,
 			s.network,
 			s.engine,
 			s.client,
 			s.bm,
-			NewKeyLocker(dec, s.network),
-			w.ID,
+			acc,
 		)
+		if err != nil {
+			return err
+		}
 	}
 	s.wMtx.Unlock()
 
-	for name, w := range s.wallets {
-		if err := w.Start(); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("wallet %s failed to start", name))
+	for name, a := range s.accounts {
+		if err := a.Start(); err != nil {
+			return errors.Wrap(err, fmt.Sprintf("account %s failed to start", name))
 		}
 	}
 	return nil
 }
 
-func (s *Node) ImportMnemonic(id, password, mnemonic string) (*walletdb.Wallet, error) {
+func (s *Node) ImportMnemonic(id, password, mnemonic string, index uint32) (*Account, error) {
 	if !bip39.IsMnemonicValid(mnemonic) {
 		return nil, errors.New("invalid mnemonic")
 	}
 
 	ek := chain.NewMasterExtendedKeyFromMnemonic(mnemonic, "", s.network)
-	wallet, err := s.create(id, password, ek)
+	wallet, err := s.create(id, password, ek, index)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating wallet")
 	}
 	return wallet, nil
 }
 
-func (s *Node) ImportXPub(id, password, xPubStr string) (*walletdb.Wallet, error) {
+func (s *Node) ImportXPub(id, password, xPubStr string, index uint32) (*Account, error) {
 	ek, err := chain.NewMasterExtendedKeyFromXPub(xPubStr, s.network)
 	if err != nil {
 		return nil, errors.Wrap(err, "error parsing xpub")
 	}
 
-	wallet, err := s.create(id, password, ek)
+	wallet, err := s.create(id, password, ek, index)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating wallet")
 	}
 	return wallet, nil
 }
 
-func (s *Node) CreateWallet(name, password string) (*walletdb.Wallet, string, error) {
+func (s *Node) CreateWallet(name, password string, index uint32) (*Account, string, error) {
 	seed, mnemonic := chain.GenerateRandomSeed("")
 	ek := chain.NewMasterExtendedKey(seed, s.network)
-	wallet, err := s.create(name, password, ek)
+	wallet, err := s.create(name, password, ek, index)
 	if err != nil {
 		return nil, "", errors.Wrap(err, "error creating wallet")
 	}
 	return wallet, mnemonic, nil
 }
 
-func (s *Node) Wallet(name string) (*Wallet, error) {
+func (s *Node) Account(id string) (*Account, error) {
 	s.wMtx.Lock()
 	defer s.wMtx.Unlock()
-	wallet := s.wallets[name]
-	if wallet == nil {
-		return nil, errors.New("wallet not found")
+	account := s.accounts[id]
+	if account == nil {
+		return nil, errors.New("account not found")
 	}
-	return wallet, nil
+	return account, nil
 }
 
-func (s *Node) Wallets() []string {
+func (s *Node) Accounts() []string {
 	s.wMtx.Lock()
 	defer s.wMtx.Unlock()
-	var wallets []string
-	for wName := range s.wallets {
-		wallets = append(wallets, wName)
+	var accounts []string
+	for id := range s.accounts {
+		accounts = append(accounts, id)
 	}
-	return wallets
+	return accounts
 }
 
-func (s *Node) create(id, password string, ek chain.ExtendedKey) (*walletdb.Wallet, error) {
+func (s *Node) create(id, password string, ek chain.ExtendedKey, index uint32) (*Account, error) {
 	s.wMtx.Lock()
 	defer s.wMtx.Unlock()
+
+	if err := ValidateAccountID(id); err != nil {
+		return nil, errors.Wrap(err, "invalid account ID")
+	}
 
 	var err error
-	var intBranch chain.ExtendedKey
-	var extBranch chain.ExtendedKey
 	var accountKey chain.ExtendedKey
 	if ek.IsPrivate() {
 		accountKey = chain.DeriveExtendedKey(
 			ek,
 			chain.HardenNode(chain.CoinPurpose),
 			chain.HardenNode(s.network.KeyPrefix.CoinType),
-			chain.HardenNode(0),
-		)
-		intBranch = chain.DeriveExtendedKey(
-			accountKey,
-			1,
-		)
-		extBranch = chain.DeriveExtendedKey(
-			accountKey,
-			0,
+			chain.HardenNode(index),
 		)
 	} else {
 		accountKey = ek
-		intBranch = chain.DeriveExtendedKey(
-			ek,
-			1,
-		)
-		extBranch = chain.DeriveExtendedKey(
-			ek,
-			0,
-		)
 	}
 
-	addrPool := NewAddrBloomFromAddrs(nil)
-	var recvAddrs []*chain.Address
-	var changeAddrs []*chain.Address
-	for i := 0; i < int(AddrLookahead); i++ {
-		recvAddr := extBranch.Child(uint32(i)).Address()
-		changeAddr := intBranch.Child(uint32(i)).Address()
-		addrPool.Add(recvAddr)
-		recvAddrs = append(recvAddrs, recvAddr)
-		addrPool.Add(changeAddr)
-		changeAddrs = append(changeAddrs, changeAddr)
-	}
-
-	dec, err := EncryptDefault([]byte(ek.PrivateString()), password)
+	bloom := NewAddressBloom()
+	ring := NewAccountKeyring(nil, accountKey, s.network)
+	dec, err := EncryptDefault([]byte(accountKey.PrivateString()), password)
 	if err != nil {
 		panic(err)
 	}
@@ -215,59 +189,67 @@ func (s *Node) create(id, password string, ek chain.ExtendedKey) (*walletdb.Wall
 		panic(err)
 	}
 
-	var wallet *walletdb.Wallet
-	err = s.engine.Transaction(func(tx walletdb.Transactor) error {
-		wallet, err = walletdb.CreateWallet(
-			tx,
-			&walletdb.Wallet{
-				ID:        id,
-				Seed:      string(seed),
-				WatchOnly: !ek.IsPrivate(),
-			},
-		)
-		if err != nil {
-			return errors.Wrap(err, "error saving wallet")
-		}
-		_, err = walletdb.CreateAccount(
-			tx,
-			"default",
-			id,
-			accountKey.PublicString(),
-			addrPool.Bytes(),
-			NewOutpointBloomFromOutpoints(nil).Bytes(),
-		)
-		if err != nil {
-			return errors.Wrap(err, "error creating initial account")
-		}
-		accID := fmt.Sprintf("%s/default", id)
-		for i := 0; i < len(recvAddrs); i++ {
-			recv := recvAddrs[i].String(s.network)
-			change := changeAddrs[i].String(s.network)
-			if _, err := walletdb.CreateAddress(tx, recv, accID, 0, i); err != nil {
-				return errors.Wrap(err, "error creating address")
-			}
-			if _, err := walletdb.CreateAddress(tx, change, accID, 1, i); err != nil {
-				return errors.Wrap(err, "error creating address")
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "error creating wallet")
+	opts := &walletdb.AccountOpts{
+		ID:            id,
+		Seed:          string(seed),
+		WatchOnly:     !ek.IsPrivate(),
+		Idx:           index,
+		XPub:          accountKey.Neuter(),
+		OutpointBloom: NewOutpointBloomFromOutpoints(nil).Bytes(),
 	}
 
-	w := NewWallet(
+	err = s.engine.Transaction(func(tx walletdb.Transactor) error {
+		for i := uint32(0); i <= AddrLookahead; i++ {
+			recv := ring.Address(chain.ReceiveBranch, i)
+			change := ring.Address(chain.ChangeBranch, i)
+			if _, err := walletdb.CreateAddress(tx, opts.ID, recv, chain.ReceiveBranch, i); err != nil {
+				return err
+			}
+			if _, err := walletdb.CreateAddress(tx, opts.ID, change, chain.ChangeBranch, i); err != nil {
+				return err
+			}
+			bloom.Update([]*chain.Address{
+				recv,
+				change,
+			})
+		}
+
+		for i := uint32(0); i <= 10; i++ {
+			dutch := HIP1AddressMaker(ring, shakedex.AddressBranch, i)
+			if _, err := walletdb.CreateAddress(tx, opts.ID, dutch, shakedex.AddressBranch, i); err != nil {
+				return err
+			}
+			bloom.Update([]*chain.Address{dutch})
+		}
+
+		opts.LookaheadTips, err = walletdb.GetLookaheadTips(tx, opts.ID)
+		if err != nil {
+			return err
+		}
+		opts.AddressBloom = bloom.Bytes()
+		return walletdb.CreateAccount(
+			tx,
+			opts,
+		)
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating account")
+	}
+
+	acc, err := NewAccount(
 		s.tmb,
 		s.network,
 		s.engine,
 		s.client,
 		s.bm,
-		NewKeyLocker(dec, s.network),
-		wallet.ID,
+		opts,
 	)
-	if err := w.Start(); err != nil {
+	if err != nil {
+		return nil, err
+	}
+	if err := acc.Start(); err != nil {
 		return nil, errors.Wrap(err, "error opening wallet")
 	}
-	s.wallets[wallet.ID] = w
-	return wallet, nil
+	s.accounts[id] = acc
+	return acc, nil
 }

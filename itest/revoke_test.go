@@ -23,18 +23,18 @@ func (s *RevokeSuite) SetupTest() {
 	s.hsd = startHSD()
 	s.client, s.cleanup = startDaemon(t)
 
-	_, err := s.client.CreateWallet(&api.CreateWalletReq{
-		Name:     "alice",
+	_, err := s.client.CreateAccount(&api.CreateAccountReq{
+		ID:       "alice",
 		Password: "password",
 	})
 	require.NoError(t, err)
-	_, err = s.client.CreateWallet(&api.CreateWalletReq{
-		Name:     "bob",
+	_, err = s.client.CreateAccount(&api.CreateAccountReq{
+		ID:       "bob",
 		Password: "password",
 	})
 	require.NoError(t, err)
 
-	info, err := s.client.GetAccount("alice", "default")
+	info, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
 
 	err = s.client.Unlock("alice", "password")
@@ -42,31 +42,31 @@ func (s *RevokeSuite) SetupTest() {
 
 	mineTo(t, s.hsd.Client, s.client, 1, info.ReceiveAddress)
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.CoinbaseMaturity, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 3)
+	awaitHeight(t, s.client, "alice", 3)
 
-	_, err = s.client.Open("alice", "default", s.name, 100, false)
+	_, err = s.client.Open("alice", s.name, 100, false)
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.TreeInterval+2, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 10)
+	awaitHeight(t, s.client, "alice", 10)
 
-	_, err = s.client.Bid("alice", "default", s.name, 100, 1000000, 2000000, false)
+	_, err = s.client.Bid("alice", s.name, 100, 1000000, 2000000, false)
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.BiddingPeriod, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 15)
+	awaitHeight(t, s.client, "alice", 15)
 
-	_, err = s.client.Reveal("alice", "default", s.name, 100, false)
+	_, err = s.client.Reveal("alice", s.name, 100, false)
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.RevealPeriod, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 15+chain.NetworkRegtest.RevealPeriod)
+	awaitHeight(t, s.client, "alice", 15+chain.NetworkRegtest.RevealPeriod)
 
-	_, err = s.client.Update("alice", "default", s.name, nil, 100, false)
+	_, err = s.client.Update("alice", s.name, nil, 100, false)
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, 1, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 16+chain.NetworkRegtest.RevealPeriod)
+	awaitHeight(t, s.client, "alice", 16+chain.NetworkRegtest.RevealPeriod)
 }
 
 func (s *RevokeSuite) TearDownTest() {
@@ -77,7 +77,7 @@ func (s *RevokeSuite) TearDownTest() {
 func (s *RevokeSuite) TestRevokeAfterUpdate() {
 	t := s.T()
 
-	_, err := s.client.Revoke("alice", "default", s.name, 100, false)
+	_, err := s.client.Revoke("alice", s.name, 100, false)
 	require.NoError(t, err)
 
 	s.runRequirements([]string{
@@ -92,13 +92,13 @@ func (s *RevokeSuite) TestRevokeAfterUpdate() {
 func (s *RevokeSuite) TestRevokeAfterTransfer() {
 	t := s.T()
 
-	_, err := s.client.Transfer("alice", "default", s.name, ZeroRegtestAddr, 100, false)
+	_, err := s.client.Transfer("alice", s.name, ZeroRegtestAddr, 100, false)
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, 1, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 17+chain.NetworkRegtest.RevealPeriod)
+	awaitHeight(t, s.client, "alice", 17+chain.NetworkRegtest.RevealPeriod)
 
-	_, err = s.client.Revoke("alice", "default", s.name, 100, false)
+	_, err = s.client.Revoke("alice", s.name, 100, false)
 	require.NoError(t, err)
 
 	s.runRequirements([]string{
@@ -114,7 +114,7 @@ func (s *RevokeSuite) TestRevokeAfterTransfer() {
 func (s *RevokeSuite) TestRevokeNotOpened() {
 	t := s.T()
 
-	_, err := s.client.Revoke("alice", "default", "notopened", 100, false)
+	_, err := s.client.Revoke("alice", "notopened", 100, false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "name state must be CLOSED")
 }
@@ -122,12 +122,12 @@ func (s *RevokeSuite) TestRevokeNotOpened() {
 func (s *RevokeSuite) runRequirements(actions []string) {
 	t := s.T()
 
-	names, err := s.client.GetNames("alice", "default")
+	names, err := s.client.GetNames("alice")
 	require.NoError(t, err)
 	require.Equal(t, 1, len(names.Names))
 	require.Equal(t, walletdb.NameStatusRevoked, names.Names[0].Status)
 
-	history, err := s.client.GetName("alice", "default", s.name)
+	history, err := s.client.GetName("alice", s.name)
 	require.NoError(t, err)
 
 	require.Equal(t, len(actions), len(history.History))
@@ -136,7 +136,7 @@ func (s *RevokeSuite) runRequirements(actions []string) {
 	}
 
 	require.Equal(t, history.History[1].OutIdx, *history.History[0].ParentOutIdx)
-	require.Equal(t, history.History[1].Transaction.Hash, *history.History[0].ParentTxHash)
+	require.Equal(t, history.History[1].Transaction.Hash.String(), *history.History[0].ParentTxHash)
 }
 
 func TestRevoke(t *testing.T) {

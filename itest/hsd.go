@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"github.com/kurumiimari/gohan/chain"
 	"github.com/kurumiimari/gohan/client"
-	"github.com/pkg/errors"
 	"github.com/kurumiimari/gohan/log"
+	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
 	"os"
@@ -111,7 +111,7 @@ func (h *HSD) Start() error {
 		return errors.Wrap(err, "error starting hsd")
 	}
 
-	h.Client = client.NewNodeRPCClient(fmt.Sprintf("http://localhost:%d", h.network.NodePort), "")
+	h.Client = client.NewNodeClient(fmt.Sprintf("http://localhost:%d", h.network.NodePort), "")
 	for i := 0; i < 4; i++ {
 		if i == 3 {
 			return errors.New("hsd never started")

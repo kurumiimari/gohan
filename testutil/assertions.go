@@ -20,7 +20,8 @@ func RequireEqualJSONFile(t *testing.T, expFilename string, actRaw interface{}) 
 	require.NoError(t, json.Unmarshal(expData, &exp))
 
 	var act interface{}
-	actJ, err := json.Marshal(actRaw)
+	actJ, err := json.MarshalIndent(actRaw, "", "  ")
+	//fmt.Println(string(actJ))
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(actJ, &act))
 	require.Equal(t, exp, act)

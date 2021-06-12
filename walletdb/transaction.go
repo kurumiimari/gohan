@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"github.com/kurumiimari/gohan/chain"
+	"github.com/kurumiimari/gohan/gcrypto"
 	"github.com/pkg/errors"
 )
 
@@ -44,8 +45,41 @@ INSERT INTO transactions (
 	return txObj, errors.WithStack(err)
 }
 
+func GetTransactionByOutpoint(q Transactor, accountID string, hash gcrypto.Hash) (*Transaction, error) {
+	row := q.QueryRow(`
+SELECT
+	hash,
+	idx,
+	block_height,
+	block_hash,
+	raw,
+	time
+FROM transactions WHERE account_id = ? AND hash = ?
+`,
+		accountID,
+		hash.String(),
+	)
+	if row.Err() != nil {
+		return nil, errors.WithStack(row.Err())
+	}
+
+	tx := new(Transaction)
+	err := row.Scan(
+		&tx.Hash,
+		&tx.Idx,
+		&tx.BlockHeight,
+		&tx.BlockHash,
+		&tx.Raw,
+		&tx.Time,
+	)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return tx, nil
+}
+
 type RichTransaction struct {
-	Hash    string        `json:"hash"`
+	Hash    gcrypto.Hash  `json:"hash"`
 	Height  int           `json:"height"`
 	Block   string        `json:"block"`
 	Time    int           `json:"time"`
@@ -58,45 +92,34 @@ type RichTransaction struct {
 }
 
 type RichInput struct {
-	Prevout  *RichPrevout `json:"prevout"`
-	Witness  []string     `json:"witness"`
-	Sequence uint32       `json:"sequence"`
-	Coin     *RichCoin    `json:"coin"`
+	Prevout  *chain.Outpoint `json:"prevout"`
+	Witness  *chain.Witness  `json:"witness"`
+	Sequence uint32          `json:"sequence"`
+	Coin     *RichCoin       `json:"coin"`
 }
 
 type RichOutput struct {
-	Value    uint64        `json:"value"`
-	Address  *RichAddress  `json:"address"`
-	Covenant *RichCovenant `json:"covenant"`
-}
-
-type RichPrevout struct {
-	Hash  string `json:"hash"`
-	Index uint32 `json:"index"`
+	Value    uint64          `json:"value"`
+	Address  *RichAddress    `json:"address"`
+	Covenant *chain.Covenant `json:"covenant"`
 }
 
 type RichCoin struct {
-	Version  int           `json:"version"`
-	Height   int           `json:"height"`
-	Value    uint64        `json:"value"`
-	Address  *RichAddress  `json:"address"`
-	Covenant *RichCovenant `json:"covenant"`
-	Coinbase bool          `json:"coinbase"`
+	Version  int             `json:"version"`
+	Height   int             `json:"height"`
+	Value    uint64          `json:"value"`
+	Address  *RichAddress    `json:"address"`
+	Covenant *chain.Covenant `json:"covenant"`
+	Coinbase bool            `json:"coinbase"`
 }
 
 type RichAddress struct {
-	Address    string           `json:"address"`
+	Address    *chain.Address   `json:"address"`
 	Derivation chain.Derivation `json:"derivation"`
 	Own        bool             `json:"own"`
 }
 
-type RichCovenant struct {
-	Type   int      `json:"type"`
-	Action string   `json:"action"`
-	Items  []string `json:"items"`
-}
-
-func ListTransactions(q Querier, accountID string, network *chain.Network, count, offset int) ([]*RichTransaction, error) {
+func ListTransactions(q Querier, accountID string, count, offset int) ([]*RichTransaction, error) {
 	txRows, err := q.Query(`
 SELECT
 	hash,
@@ -120,7 +143,7 @@ ORDER BY block_height DESC LIMIT ? OFFSET ?
 
 	out := make([]*RichTransaction, 0)
 	for txRows.Next() {
-		out, err = inflateTx(q, accountID, network, txRows, out)
+		out, err = inflateTx(q, accountID, txRows, out)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
@@ -128,7 +151,7 @@ ORDER BY block_height DESC LIMIT ? OFFSET ?
 	return out, nil
 }
 
-func inflateTx(q Querier, accountID string, network *chain.Network, r *sql.Rows, out []*RichTransaction) ([]*RichTransaction, error) {
+func inflateTx(q Querier, accountID string, r *sql.Rows, out []*RichTransaction) ([]*RichTransaction, error) {
 	tx := new(RichTransaction)
 	var raw []byte
 	err := r.Scan(
@@ -143,13 +166,13 @@ func inflateTx(q Querier, accountID string, network *chain.Network, r *sql.Rows,
 		return nil, err
 	}
 	tx.Hex = hex.EncodeToString(raw)
-	if err := fillRichTransaction(q, accountID, network, tx, raw); err != nil {
+	if err := fillRichTransaction(q, accountID, tx, raw); err != nil {
 		return nil, err
 	}
 	return append(out, tx), nil
 }
 
-func fillRichTransaction(q Querier, accountID string, network *chain.Network, tx *RichTransaction, rawTx []byte) error {
+func fillRichTransaction(q Querier, accountID string, tx *RichTransaction, rawTx []byte) error {
 	protoTx := new(chain.Transaction)
 	if _, err := protoTx.ReadFrom(bytes.NewReader(rawTx)); err != nil {
 		panic(err)
@@ -159,9 +182,7 @@ func fillRichTransaction(q Querier, accountID string, network *chain.Network, tx
 	var totalOutputs uint64
 	hasAllInputs := true
 	for i, input := range protoTx.Inputs {
-		witnesses := convertItemsToHex(protoTx.Witnesses[i].Items)
-		pHashStr := hex.EncodeToString(input.Prevout.Hash)
-		coin, err := GetCoinByOutpoint(q, accountID, pHashStr, int(input.Prevout.Index))
+		coin, err := GetCoinByPrevout(q, accountID, input.Prevout)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -171,57 +192,48 @@ func fillRichTransaction(q Querier, accountID string, network *chain.Network, tx
 		} else {
 			rc = &RichCoin{
 				Version: 0,
-				Height:  coin.BlockHeight,
+				Height:  coin.Height,
 				Value:   coin.Value,
 				Address: &RichAddress{
 					Address:    coin.Address,
-					Derivation: chain.Derivation{coin.AddressBranch, coin.AddressIndex},
+					Derivation: coin.Derivation,
 					Own:        true,
 				},
-				Covenant: &RichCovenant{
-					Type:   int(chain.NewCovenantTypeFromString(coin.CovenantType)),
-					Action: coin.CovenantType,
-					Items:  convertItemsToHex(coin.CovenantItems),
-				},
+				Covenant: coin.Covenant,
 				Coinbase: coin.Coinbase,
 			}
 			totalInputs += coin.Value
 		}
 
 		tx.Inputs = append(tx.Inputs, &RichInput{
-			Prevout: &RichPrevout{
-				Hash:  pHashStr,
-				Index: input.Prevout.Index,
-			},
-			Witness:  witnesses,
+			Prevout:  input.Prevout,
+			Witness:  protoTx.Witnesses[i],
 			Sequence: input.Sequence,
 			Coin:     rc,
 		})
 	}
 
 	for i, output := range protoTx.Outputs {
-		coin, err := GetCoinByOutpoint(q, accountID, tx.Hash, i)
+		coin, err := GetCoinByPrevout(q, accountID, &chain.Outpoint{
+			Hash:  tx.Hash,
+			Index: uint32(i),
+		})
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-
 		var deriv chain.Derivation
 		if coin != nil {
-			deriv = chain.Derivation{coin.AddressBranch, coin.AddressIndex}
+			deriv = coin.Derivation
 		}
 
 		tx.Outputs = append(tx.Outputs, &RichOutput{
 			Value: output.Value,
 			Address: &RichAddress{
-				Address:    output.Address.String(network),
+				Address:    output.Address,
 				Derivation: deriv,
 				Own:        coin != nil,
 			},
-			Covenant: &RichCovenant{
-				Type:   int(output.Covenant.Type),
-				Action: output.Covenant.Type.String(),
-				Items:  convertItemsToHex(output.Covenant.Items),
-			},
+			Covenant: output.Covenant,
 		})
 
 		totalOutputs += output.Value
@@ -232,12 +244,4 @@ func fillRichTransaction(q Querier, accountID string, network *chain.Network, tx
 	}
 
 	return nil
-}
-
-func convertItemsToHex(in [][]byte) []string {
-	out := make([]string, len(in))
-	for i, item := range in {
-		out[i] = hex.EncodeToString(item)
-	}
-	return out
 }

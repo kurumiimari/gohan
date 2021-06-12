@@ -2,43 +2,95 @@ package api
 
 import (
 	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"github.com/gorilla/mux"
 	"github.com/kurumiimari/gohan/chain"
+	"github.com/kurumiimari/gohan/gcrypto"
 	"github.com/kurumiimari/gohan/wallet"
-	"github.com/kurumiimari/gohan/walletdb"
 	"github.com/pkg/errors"
 	"net/http"
 )
 
-func AccountParams(r *http.Request) (string, string) {
+func AccountParams(r *http.Request) string {
 	params := mux.Vars(r)
-	walletID := params["walletID"]
 	accountID := params["accountID"]
-	return walletID, accountID
+	return accountID
 }
 
-type AccountAddressDepth struct {
-	Receive uint32 `json:"receive"`
-	Change  uint32 `json:"change"`
+func (a *API) HandleAccountsGET(w http.ResponseWriter, r *http.Request) {
+	accounts := a.node.Accounts()
+	MarshalResponseJSON(w, &GetAccountsRes{
+		Accounts: accounts,
+	})
 }
 
-type AccountGetRes struct {
-	Name           string               `json:"name"`
-	Index          uint32               `json:"index"`
-	WalletName     string               `json:"wallet_name"`
-	Balances       *walletdb.Balances   `json:"balances"`
-	AddressDepth   *AccountAddressDepth `json:"address_depth"`
-	LookaheadDepth *AccountAddressDepth `json:"lookahead_depth"`
-	ReceiveAddress string               `json:"receive_address"`
-	ChangeAddress  string               `json:"change_address"`
-	XPub           string               `json:"xpub"`
-	RescanHeight   int                  `json:"rescan_height"`
+func (a *API) HandleAccountsPOST(w http.ResponseWriter, r *http.Request) {
+	req := new(CreateAccountReq)
+	if !UnmarshalRequestJSON(w, r, req) {
+		return
+	}
+
+	var err error
+	var mnemonic string
+	if req.XPub != "" {
+		_, err = a.node.ImportXPub(req.ID, req.Password, req.XPub, req.Index)
+	} else if req.Mnemonic != "" {
+		_, err = a.node.ImportMnemonic(req.ID, req.Password, req.Mnemonic, req.Index)
+	} else {
+		_, mnemonic, err = a.node.CreateWallet(req.ID, req.Password, req.Index)
+	}
+
+	if err != nil {
+		MarshalErrorJSON(w, err, 400)
+		return
+	}
+
+	res := &CreateAccountRes{
+		ID:        req.ID,
+		WatchOnly: req.XPub != "",
+	}
+	if mnemonic != "" {
+		res.Mnemonic = &mnemonic
+	}
+	MarshalResponseJSON(w, res)
+}
+
+func (a *API) HandleAccountUnlockPOST(w http.ResponseWriter, r *http.Request) {
+	acc, err := a.getAccount(r)
+	if err != nil {
+		MarshalErrorJSON(w, err, 400)
+		return
+	}
+
+	req := new(UnlockReq)
+	if !UnmarshalRequestJSON(w, r, req) {
+		return
+	}
+
+	if err := acc.Unlock(req.Password); err != nil {
+		MarshalErrorJSON(w, err, 400)
+		return
+	}
+
+	w.WriteHeader(204)
+}
+
+func (a *API) HandleAccountLockPOST(w http.ResponseWriter, r *http.Request) {
+	acc, err := a.getAccount(r)
+	if err != nil {
+		MarshalErrorJSON(w, err, 400)
+		return
+	}
+
+	acc.Lock()
+	w.WriteHeader(204)
+}
+
+type GetAccountsRes struct {
+	Accounts []string `json:"accounts"`
 }
 
 func (a *API) HandleAccountGET(w http.ResponseWriter, r *http.Request) {
-	acc, wall, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -57,20 +109,19 @@ func (a *API) HandleAccountGET(w http.ResponseWriter, r *http.Request) {
 	// Add one to address depths
 	// to match HSD
 	res := &AccountGetRes{
-		Name:       acc.Name(),
-		Index:      acc.Index(),
-		WalletName: wall.ID(),
-		Balances:   balances,
+		ID:       acc.ID(),
+		Index:    acc.Index(),
+		Balances: balances,
 		AddressDepth: &AccountAddressDepth{
 			recvDepth + 1,
 			chgDepth + 1,
 		},
 		LookaheadDepth: &AccountAddressDepth{
-			recvLook + 1,
-			chgLook + 1,
+			recvLook,
+			chgLook,
 		},
-		ReceiveAddress: recvAddr.String(a.network),
-		ChangeAddress:  chgAddr.String(a.network),
+		ReceiveAddress: recvAddr.String(),
+		ChangeAddress:  chgAddr.String(),
 		XPub:           acc.XPub(),
 		RescanHeight:   acc.RescanHeight(),
 	}
@@ -78,7 +129,7 @@ func (a *API) HandleAccountGET(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) HandleAccountTransactionsGET(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -97,68 +148,25 @@ func (a *API) HandleAccountTransactionsGET(w http.ResponseWriter, r *http.Reques
 	MarshalResponseJSON(w, txs)
 }
 
-type CoinsGetRes struct {
-	Version  int    `json:"version"`
-	Height   int    `json:"height"`
-	Value    uint64 `json:"value"`
-	Address  string `json:"address"`
-	Covenant struct {
-		Type   int      `json:"type"`
-		Action string   `json:"action"`
-		Items  []string `json:"items"`
-	} `json:"covenant"`
-	Coinbase bool   `json:"coinbase"`
-	Hash     string `json:"hash"`
-	Index    int    `json:"index"`
-}
-
 func (a *API) HandleCoinsGET(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
 	}
 
-	res := make([]*CoinsGetRes, 0)
 	coins, err := acc.Coins()
 	if err != nil {
 		MarshalErrorJSON(w, err, 500)
 		return
 	}
-	for _, coin := range coins {
-		covItems := make([]string, len(coin.CovenantItems))
-		for i, item := range coin.CovenantItems {
-			covItems[i] = hex.EncodeToString(item)
-		}
-
-		res = append(res, &CoinsGetRes{
-			Version: 0,
-			Height:  coin.BlockHeight,
-			Value:   coin.Value,
-			Address: coin.Address,
-			Covenant: struct {
-				Type   int      `json:"type"`
-				Action string   `json:"action"`
-				Items  []string `json:"items"`
-			}{
-				int(chain.NewCovenantTypeFromString(coin.CovenantType)),
-				coin.CovenantType,
-				covItems,
-			},
-			Coinbase: coin.Coinbase,
-			Hash:     coin.TxHash,
-			Index:    coin.OutIdx,
-		})
-	}
-	MarshalResponseJSON(w, res)
-}
-
-type GetNamesRes struct {
-	Names []*walletdb.Name `json:"names"`
+	MarshalResponseJSON(w, &CoinsGetRes{
+		Coins: coins,
+	})
 }
 
 func (a *API) HandleNamesGET(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -177,12 +185,8 @@ func (a *API) HandleNamesGET(w http.ResponseWriter, r *http.Request) {
 	MarshalResponseJSON(w, &GetNamesRes{Names: names})
 }
 
-type GetNameRes struct {
-	History []*walletdb.RichNameHistoryEntry `json:"history"`
-}
-
 func (a *API) HandleNameGET(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -203,13 +207,8 @@ func (a *API) HandleNameGET(w http.ResponseWriter, r *http.Request) {
 	MarshalResponseJSON(w, &GetNameRes{History: history})
 }
 
-type GenAddressRes struct {
-	Address    string `json:"address"`
-	Derivation string `json:"derivation"`
-}
-
 func (a *API) HandleGenerateReceiveAddress(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -222,13 +221,13 @@ func (a *API) HandleGenerateReceiveAddress(w http.ResponseWriter, r *http.Reques
 	}
 
 	MarshalResponseJSON(w, &GenAddressRes{
-		Address:    addr.String(a.network),
+		Address:    addr.String(),
 		Derivation: chain.Derivation{0, idx}.String(),
 	})
 }
 
 func (a *API) HandleGenerateChangeAddress(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -241,19 +240,13 @@ func (a *API) HandleGenerateChangeAddress(w http.ResponseWriter, r *http.Request
 	}
 
 	MarshalResponseJSON(w, &GenAddressRes{
-		Address:    addr.String(a.network),
+		Address:    addr.String(),
 		Derivation: chain.Derivation{1, idx}.String(),
 	})
 }
 
-type CreateOpenReq struct {
-	Name       string `json:"name"`
-	FeeRate    uint64 `json:"fee_rate"`
-	CreateOnly bool   `json:"create_only"`
-}
-
 func (a *API) HandleAccountOpensPOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -273,16 +266,8 @@ func (a *API) HandleAccountOpensPOST(w http.ResponseWriter, r *http.Request) {
 	MarshalResponseJSON(w, tx)
 }
 
-type CreateBidReq struct {
-	Name       string `json:"name"`
-	FeeRate    uint64 `json:"fee_rate"`
-	Value      uint64 `json:"value"`
-	Lockup     uint64 `json:"lockup"`
-	CreateOnly bool   `json:"create_only"`
-}
-
 func (a *API) HandleAccountBidsPOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -302,54 +287,8 @@ func (a *API) HandleAccountBidsPOST(w http.ResponseWriter, r *http.Request) {
 	MarshalResponseJSON(w, tx)
 }
 
-type CreateRevealReq struct {
-	Name       string `json:"name"`
-	FeeRate    uint64 `json:"fee_rate"`
-	CreateOnly bool   `json:"create_only"`
-}
-
-type MultiRes struct {
-	Txs  []*chain.Transaction
-	Errs []error
-}
-
-func (m *MultiRes) MarshalJSON() ([]byte, error) {
-	var errs []string
-	for _, err := range m.Errs {
-		errs = append(errs, err.Error())
-	}
-
-	return json.Marshal(struct {
-		Txs  []*chain.Transaction `json:"txs"`
-		Errs []string             `json:"errs"`
-	}{
-		Txs:  m.Txs,
-		Errs: errs,
-	})
-}
-
-func (m *MultiRes) UnmarshalJSON(bytes []byte) error {
-	tmp := struct {
-		Txs  []*chain.Transaction `json:"txs"`
-		Errs []string             `json:"errs"`
-	}{}
-
-	if err := json.Unmarshal(bytes, &tmp); err != nil {
-		return err
-	}
-
-	errs := make([]error, len(tmp.Errs))
-	for i, err := range tmp.Errs {
-		errs[i] = errors.New(err)
-	}
-
-	m.Txs = tmp.Txs
-	m.Errs = errs
-	return nil
-}
-
 func (a *API) HandleAccountRevealsPOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -369,14 +308,8 @@ func (a *API) HandleAccountRevealsPOST(w http.ResponseWriter, r *http.Request) {
 	MarshalResponseJSON(w, tx)
 }
 
-type CreateRedeemReq struct {
-	Name       string `json:"name"`
-	FeeRate    uint64 `json:"fee_rate"`
-	CreateOnly bool   `json:"create_only"`
-}
-
 func (a *API) HandleAccountRedeemsPOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -395,15 +328,8 @@ func (a *API) HandleAccountRedeemsPOST(w http.ResponseWriter, r *http.Request) {
 	MarshalResponseJSON(w, tx)
 }
 
-type CreateUpdateReq struct {
-	Name       string          `json:"name"`
-	Resource   *chain.Resource `json:"resource"`
-	FeeRate    uint64          `json:"fee_rate"`
-	CreateOnly bool            `json:"create_only"`
-}
-
 func (a *API) HandleAccountUpdatesPOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -422,15 +348,8 @@ func (a *API) HandleAccountUpdatesPOST(w http.ResponseWriter, r *http.Request) {
 	MarshalResponseJSON(w, tx)
 }
 
-type CreateTransferReq struct {
-	Name       string `json:"name"`
-	Address    string `json:"address"`
-	FeeRate    uint64 `json:"fee_rate"`
-	CreateOnly bool   `json:"create_only"`
-}
-
 func (a *API) HandleAccountTransfersPOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -455,14 +374,8 @@ func (a *API) HandleAccountTransfersPOST(w http.ResponseWriter, r *http.Request)
 	MarshalResponseJSON(w, tx)
 }
 
-type CreateFinalizeReq struct {
-	Name       string `json:"name"`
-	FeeRate    uint64 `json:"fee_rate"`
-	CreateOnly bool   `json:"create_only"`
-}
-
 func (a *API) HandleAccountFinalizesPOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -481,14 +394,8 @@ func (a *API) HandleAccountFinalizesPOST(w http.ResponseWriter, r *http.Request)
 	MarshalResponseJSON(w, tx)
 }
 
-type CreateRenewalsReq struct {
-	Name       string `json:"name"`
-	FeeRate    uint64 `json:"fee_rate"`
-	CreateOnly bool   `json:"create_only"`
-}
-
 func (a *API) HandleAccountRenewalsPOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -507,14 +414,8 @@ func (a *API) HandleAccountRenewalsPOST(w http.ResponseWriter, r *http.Request) 
 	MarshalResponseJSON(w, tx)
 }
 
-type CreateRevokeReq struct {
-	Name       string `json:"name"`
-	FeeRate    uint64 `json:"fee_rate"`
-	CreateOnly bool   `json:"create_only"`
-}
-
 func (a *API) HandleAccountRevokesPOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 400)
 		return
@@ -533,15 +434,8 @@ func (a *API) HandleAccountRevokesPOST(w http.ResponseWriter, r *http.Request) {
 	MarshalResponseJSON(w, tx)
 }
 
-type CreateSendReq struct {
-	Value      uint64 `json:"value"`
-	Address    string `json:"address"`
-	FeeRate    uint64 `json:"fee_rate"`
-	CreateOnly bool   `json:"create_only"`
-}
-
 func (a *API) HandleAccountSendPOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 404)
 		return
@@ -566,7 +460,7 @@ func (a *API) HandleAccountSendPOST(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) HandleZapPost(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 404)
 		return
@@ -579,12 +473,8 @@ func (a *API) HandleZapPost(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
-type RescanReq struct {
-	Height int `json:"height"`
-}
-
 func (a *API) HandleRescanPOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 404)
 		return
@@ -603,17 +493,8 @@ func (a *API) HandleRescanPOST(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
-type SignMessageReq struct {
-	Address string `json:"address"`
-	Message string `json:"data"`
-}
-
-type SignMessageRes struct {
-	Signature string `json:"signature"`
-}
-
 func (a *API) HandleSignMessagePOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 404)
 		return
@@ -637,17 +518,12 @@ func (a *API) HandleSignMessagePOST(w http.ResponseWriter, r *http.Request) {
 	}
 
 	MarshalResponseJSON(w, &SignMessageRes{
-		Signature: base64.StdEncoding.EncodeToString(chain.SerializeRawSignature(sig)),
+		Signature: base64.StdEncoding.EncodeToString(chain.SerializeSignature(sig)),
 	})
 }
 
-type SignMessageWithNameReq struct {
-	Name    string `json:"name"`
-	Message string `json:"message"`
-}
-
 func (a *API) HandleSignMessageWithNamePOST(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 404)
 		return
@@ -665,16 +541,12 @@ func (a *API) HandleSignMessageWithNamePOST(w http.ResponseWriter, r *http.Reque
 	}
 
 	MarshalResponseJSON(w, &SignMessageRes{
-		Signature: base64.StdEncoding.EncodeToString(chain.SerializeRawSignature(sig)),
+		Signature: base64.StdEncoding.EncodeToString(chain.SerializeSignature(sig)),
 	})
 }
 
-type UnspentBidsRes struct {
-	UnspentBids []*wallet.UnspentBid `json:"unspent_bids"`
-}
-
 func (a *API) HandleUnspentBidsGET(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 404)
 		return
@@ -693,12 +565,8 @@ func (a *API) HandleUnspentBidsGET(w http.ResponseWriter, r *http.Request) {
 	MarshalResponseJSON(w, &UnspentBidsRes{UnspentBids: bids})
 }
 
-type UnspentRevealsRes struct {
-	UnspentReveals []*wallet.UnspentReveal `json:"unspent_reveals"`
-}
-
 func (a *API) HandleUnspentRevealsGET(w http.ResponseWriter, r *http.Request) {
-	acc, _, err := a.getAccount(r)
+	acc, err := a.getAccount(r)
 	if err != nil {
 		MarshalErrorJSON(w, err, 404)
 		return
@@ -717,15 +585,183 @@ func (a *API) HandleUnspentRevealsGET(w http.ResponseWriter, r *http.Request) {
 	MarshalResponseJSON(w, &UnspentRevealsRes{UnspentReveals: revs})
 }
 
-func (a *API) getAccount(r *http.Request) (*wallet.Account, *wallet.Wallet, error) {
-	walletID, accountID := AccountParams(r)
-	w, err := a.node.Wallet(walletID)
+func (a *API) HandleDutchAuctionListingTransfersPOST(w http.ResponseWriter, r *http.Request) {
+	acc, err := a.getAccount(r)
 	if err != nil {
-		return nil, nil, err
+		MarshalErrorJSON(w, err, 404)
+		return
 	}
-	acc, err := w.Account(accountID)
+
+	req := new(DutchAuctionListingTransferReq)
+	if !UnmarshalRequestJSON(w, r, req) {
+		return
+	}
+
+	tx, err := acc.TransferDutchAuctionListing(
+		req.Name,
+		req.FeeRate,
+	)
 	if err != nil {
-		return nil, nil, err
+		MarshalErrorJSON(w, err, 400)
+		return
 	}
-	return acc, w, nil
+
+	MarshalResponseJSON(w, tx)
+}
+
+func (a *API) HandleDutchAuctionListingFinalizesPOST(w http.ResponseWriter, r *http.Request) {
+	acc, err := a.getAccount(r)
+	if err != nil {
+		MarshalErrorJSON(w, err, 404)
+		return
+	}
+
+	req := new(DutchAuctionListingFinalizeReq)
+	if !UnmarshalRequestJSON(w, r, req) {
+		return
+	}
+
+	tx, err := acc.FinalizeDutchAuctionListing(req.Name, req.FeeRate)
+	if err != nil {
+		MarshalErrorJSON(w, err, 400)
+		return
+	}
+
+	MarshalResponseJSON(w, tx)
+}
+
+func (a *API) HandleUpdateDutchAuctionListingsPOST(w http.ResponseWriter, r *http.Request) {
+	acc, err := a.getAccount(r)
+	if err != nil {
+		MarshalErrorJSON(w, err, 404)
+		return
+	}
+
+	req := new(UpdateDutchAuctionListingsReq)
+	if !UnmarshalRequestJSON(w, r, req) {
+		return
+	}
+
+	res, err := acc.UpdateDutchAuctionListing(
+		req.Name,
+		req.StartPrice,
+		req.EndPrice,
+		req.FeeAddress,
+		req.FeePercent,
+		req.NumDecrements,
+		req.DecrementDurationSecs,
+	)
+	if err != nil {
+		MarshalErrorJSON(w, err, 500)
+		return
+	}
+
+	MarshalResponseJSON(w, res)
+}
+
+func (a *API) HandleDutchAuctionFillTransfersPOST(w http.ResponseWriter, r *http.Request) {
+	acc, err := a.getAccount(r)
+	if err != nil {
+		MarshalErrorJSON(w, err, 404)
+		return
+	}
+
+	req := new(TransferDutchAuctionFillReq)
+	if !UnmarshalRequestJSON(w, r, req) {
+		return
+	}
+
+	tx, err := acc.FillDutchAuction(
+		req.Name,
+		&chain.Outpoint{
+			Hash:  gcrypto.Hash(req.LockScriptTxHash),
+			Index: req.LockScriptOutIdx,
+		},
+		req.PaymentAddress,
+		req.FeeAddress,
+		req.PublicKey,
+		req.Signature,
+		req.LockTime,
+		req.Bid,
+		req.AuctionFee,
+		req.FeeRate,
+	)
+	if err != nil {
+		MarshalErrorJSON(w, err, 400)
+		return
+	}
+
+	MarshalResponseJSON(w, tx)
+}
+
+func (a *API) HandleDutchAuctionFillFinalizesPOST(w http.ResponseWriter, r *http.Request) {
+	acc, err := a.getAccount(r)
+	if err != nil {
+		MarshalErrorJSON(w, err, 404)
+		return
+	}
+
+	req := new(DutchAuctionFillFinalizeReq)
+	if !UnmarshalRequestJSON(w, r, req) {
+		return
+	}
+
+	tx, err := acc.FinalizeDutchAuction(req.Name, req.FeeRate)
+	if err != nil {
+		MarshalErrorJSON(w, err, 400)
+		return
+	}
+
+	MarshalResponseJSON(w, tx)
+}
+
+func (a *API) HandleDutchAuctionCancelTransfersPOST(w http.ResponseWriter, r *http.Request) {
+	acc, err := a.getAccount(r)
+	if err != nil {
+		MarshalErrorJSON(w, err, 404)
+		return
+	}
+
+	req := new(DutchAuctionCancelTransferReq)
+	if !UnmarshalRequestJSON(w, r, req) {
+		return
+	}
+
+	tx, err := acc.TransferDutchAuctionCancel(req.Name, req.FeeRate)
+	if err != nil {
+		MarshalErrorJSON(w, err, 400)
+		return
+	}
+
+	MarshalResponseJSON(w, tx)
+}
+
+func (a *API) HandleDutchAuctionCancelFinalizesPOST(w http.ResponseWriter, r *http.Request) {
+	acc, err := a.getAccount(r)
+	if err != nil {
+		MarshalErrorJSON(w, err, 404)
+		return
+	}
+
+	req := new(DutchAuctionCancelFinalizeReq)
+	if !UnmarshalRequestJSON(w, r, req) {
+		return
+	}
+
+	tx, err := acc.FinalizeDutchAuctionCancel(req.Name, req.FeeRate)
+	if err != nil {
+		MarshalErrorJSON(w, err, 400)
+		return
+	}
+
+	MarshalResponseJSON(w, tx)
+}
+
+func (a *API) getAccount(r *http.Request) (*wallet.Account, error) {
+	accountID := AccountParams(r)
+	account, err := a.node.Account(accountID)
+	if err != nil {
+		return nil, err
+	}
+	return account, nil
 }

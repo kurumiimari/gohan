@@ -12,8 +12,8 @@ import (
 )
 
 func Start(tmb *tomb.Tomb, network *chain.Network, prefix, apiKey, nodeAPIKey string) error {
-	nodeClient := client.NewNodeRPCClient(fmt.Sprintf("http://localhost:%d", network.NodePort), nodeAPIKey)
-
+	chain.SetCurrNetwork(network)
+	nodeClient := client.NewNodeClient(fmt.Sprintf("http://localhost:%d", network.NodePort), nodeAPIKey)
 	engine, err := walletdb.NewEngine(prefix)
 	if err != nil {
 		return err

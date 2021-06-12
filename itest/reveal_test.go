@@ -22,13 +22,13 @@ func (s *RevealSuite) SetupTest() {
 	s.hsd = startHSD()
 	s.client, s.cleanup = startDaemon(t)
 
-	_, err := s.client.CreateWallet(&api.CreateWalletReq{
-		Name:     "alice",
+	_, err := s.client.CreateAccount(&api.CreateAccountReq{
+		ID:       "alice",
 		Password: "password",
 	})
 	require.NoError(t, err)
-	_, err = s.client.CreateWallet(&api.CreateWalletReq{
-		Name:     "bob",
+	_, err = s.client.CreateAccount(&api.CreateAccountReq{
+		ID:       "bob",
 		Password: "password",
 	})
 	require.NoError(t, err)
@@ -38,21 +38,21 @@ func (s *RevealSuite) SetupTest() {
 	err = s.client.Unlock("bob", "password")
 	require.NoError(t, err)
 
-	aliceInfo, err := s.client.GetAccount("alice", "default")
+	aliceInfo, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
-	bobInfo, err := s.client.GetAccount("bob", "default")
+	bobInfo, err := s.client.GetAccount("bob")
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, 1, aliceInfo.ReceiveAddress)
 	mineTo(t, s.hsd.Client, s.client, 1, bobInfo.ReceiveAddress)
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.CoinbaseMaturity, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 4)
+	awaitHeight(t, s.client, "alice", 4)
 
-	_, err = s.client.Open("alice", "default", s.name, 100, false)
+	_, err = s.client.Open("alice", s.name, 100, false)
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.TreeInterval+2, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 11)
+	awaitHeight(t, s.client, "alice", 11)
 }
 
 func (s *RevealSuite) TearDownTest() {
@@ -65,7 +65,6 @@ func (s *RevealSuite) TestMultipleBids() {
 	for i := 0; i < 3; i++ {
 		_, err := s.client.Bid(
 			"alice",
-			"default",
 			s.name,
 			100,
 			uint64((i+1)*1000000),
@@ -76,9 +75,9 @@ func (s *RevealSuite) TestMultipleBids() {
 	}
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.BiddingPeriod, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", chain.NetworkRegtest.BiddingPeriod+11)
+	awaitHeight(t, s.client, "alice", chain.NetworkRegtest.BiddingPeriod+11)
 
-	revs, err := s.client.Reveal("alice", "default", s.name, 100, false)
+	revs, err := s.client.Reveal("alice", s.name, 100, false)
 	require.NoError(t, err)
 	require.Equal(t, 3, len(revs.Inputs))
 }
@@ -87,7 +86,6 @@ func (s *RevealSuite) TestSingleBid() {
 	t := s.T()
 	_, err := s.client.Bid(
 		"alice",
-		"default",
 		s.name,
 		100,
 		1000000,
@@ -97,9 +95,9 @@ func (s *RevealSuite) TestSingleBid() {
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.BiddingPeriod, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", chain.NetworkRegtest.BiddingPeriod+11)
+	awaitHeight(t, s.client, "alice", chain.NetworkRegtest.BiddingPeriod+11)
 
-	_, err = s.client.Reveal("alice", "default", s.name, 100, false)
+	_, err = s.client.Reveal("alice", s.name, 100, false)
 	require.NoError(t, err)
 }
 
@@ -107,9 +105,9 @@ func (s *RevealSuite) TestNoBids() {
 	t := s.T()
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.BiddingPeriod, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", chain.NetworkRegtest.BiddingPeriod+11)
+	awaitHeight(t, s.client, "alice", chain.NetworkRegtest.BiddingPeriod+11)
 
-	_, err := s.client.Reveal("alice", "default", s.name, 100, false)
+	_, err := s.client.Reveal("alice", s.name, 100, false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no bids to reveal")
 }

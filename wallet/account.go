@@ -10,11 +10,14 @@ import (
 	"github.com/kurumiimari/gohan/chain"
 	"github.com/kurumiimari/gohan/client"
 	"github.com/kurumiimari/gohan/log"
+	"github.com/kurumiimari/gohan/shakedex"
+	"github.com/kurumiimari/gohan/txscript"
 	"github.com/kurumiimari/gohan/walletdb"
 	"github.com/pkg/errors"
 	"github.com/tyler-smith/go-bip32"
 	"golang.org/x/crypto/blake2b"
 	"gopkg.in/tomb.v2"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -24,7 +27,11 @@ const (
 	BlockFetchConcurrency = 5
 )
 
-var accLogger = log.ModuleLogger("account")
+var (
+	accIDRegex *regexp.Regexp
+
+	accLogger = log.ModuleLogger("account")
+)
 
 type UnspentBid struct {
 	Name            string `json:"name"`
@@ -53,10 +60,13 @@ type Account struct {
 	engine        *walletdb.Engine
 	client        *client.NodeRPCClient
 	bm            *BlockMonitor
+	keyLocker     *KeyLocker
 	ring          Keyring
-	addrManager   *AddrManager
+	addrBloom     *AddressBloom
+	recvMgr       *AddressManager
+	changeMgr     *AddressManager
+	dutchMgr      *AddressManager
 	id            string
-	name          string
 	idx           uint32
 	rescanHeight  int
 	xPub          *bip32.Key
@@ -71,31 +81,68 @@ func NewAccount(
 	engine *walletdb.Engine,
 	client *client.NodeRPCClient,
 	bm *BlockMonitor,
-	ring Keyring,
-	dbAcc *walletdb.Account,
-) *Account {
-	return &Account{
-		tmb:     tmb,
-		network: network,
-		engine:  engine,
-		client:  client,
-		bm:      bm,
-		ring:    ring,
-		addrManager: NewAddrManager(
-			network,
-			ring,
-			MustAddressBloomFromBytes(dbAcc.AddressBloom),
-			dbAcc.ID,
-			[2]uint32{dbAcc.ReceivingIdx, dbAcc.ChangeIdx},
-			dbAcc.LookaheadTips,
-		),
-		id:            dbAcc.ID,
-		name:          dbAcc.Name,
-		idx:           dbAcc.Idx,
-		rescanHeight:  dbAcc.RescanHeight,
-		outpointBloom: MustOutpointBloomFromBytes(dbAcc.OutpointBloom),
-		lgr:           accLogger.Child("id", fmt.Sprintf("%s/%s", dbAcc.WalletID, dbAcc.Name)),
+	opts *walletdb.AccountOpts,
+) (*Account, error) {
+	box, err := UnmarshalSecretBox([]byte(opts.Seed))
+	if err != nil {
+		return nil, err
 	}
+	addrBloom, err := NewAddressBloomFromBytes(opts.AddressBloom)
+	if err != nil {
+		return nil, err
+	}
+	outBloom, err := NewOutpointBloomFromBytes(opts.OutpointBloom)
+	if err != nil {
+		return nil, err
+	}
+
+	keyLocker := NewKeyLocker(box, network)
+	ring := NewAccountKeyring(keyLocker, opts.XPub, network)
+
+	return &Account{
+		tmb:       tmb,
+		network:   network,
+		engine:    engine,
+		client:    client,
+		bm:        bm,
+		keyLocker: keyLocker,
+		ring:      ring,
+		addrBloom: addrBloom,
+		recvMgr: NewAddressManager(
+			ring,
+			addrBloom,
+			opts.ID,
+			chain.ReceiveBranch,
+			opts.RecvIdx,
+			int64(opts.LookaheadTips[chain.ReceiveBranch]),
+		),
+		changeMgr: NewAddressManager(
+			ring,
+			addrBloom,
+			opts.ID,
+			chain.ChangeBranch,
+			opts.ChangeIdx,
+			int64(opts.LookaheadTips[chain.ChangeBranch]),
+		),
+		dutchMgr: NewAddressManager(
+			ring,
+			addrBloom,
+			opts.ID,
+			shakedex.AddressBranch,
+			opts.DutchAuctionIdx,
+			int64(opts.LookaheadTips[shakedex.AddressBranch]),
+			WithLookSize(10),
+			WithAddressMaker(HIP1AddressMaker),
+		),
+		id:            opts.ID,
+		idx:           opts.Idx,
+		rescanHeight:  opts.RescanHeight,
+		outpointBloom: outBloom,
+		lgr: accLogger.Child(
+			"id",
+			opts.ID,
+		),
+	}, nil
 }
 
 func (a *Account) Start() error {
@@ -121,8 +168,8 @@ func (a *Account) Start() error {
 	return nil
 }
 
-func (a *Account) Name() string {
-	return a.name
+func (a *Account) ID() string {
+	return a.id
 }
 
 func (a *Account) Index() uint32 {
@@ -130,8 +177,21 @@ func (a *Account) Index() uint32 {
 }
 
 func (a *Account) Locked() bool {
-	_, err := a.ring.PrivateKey(0, 0)
-	return errors.Is(err, ErrLocked)
+	return a.keyLocker.Locked()
+}
+
+func (a *Account) Unlock(password string) error {
+	err := a.keyLocker.Unlock(password)
+	if err != nil {
+		a.lgr.Warning("unlock attempt failed")
+		return err
+	}
+	a.lgr.Info("wallet unlocked")
+	return nil
+}
+
+func (a *Account) Lock() {
+	a.keyLocker.Lock()
 }
 
 func (a *Account) RescanHeight() int {
@@ -149,19 +209,19 @@ func (a *Account) Balances() (*walletdb.Balances, error) {
 }
 
 func (a *Account) AddressDepth() (uint32, uint32) {
-	return a.addrManager.RecvDepth(), a.addrManager.ChangeDepth()
+	return a.recvMgr.Depth(), a.changeMgr.Depth()
 }
 
 func (a *Account) LookaheadDepth() (uint32, uint32) {
-	return a.addrManager.RecvLookahead(), a.addrManager.ChangeLookahead()
+	return a.recvMgr.Lookahead(), a.changeMgr.Lookahead()
 }
 
 func (a *Account) ReceiveAddress() *chain.Address {
-	return a.addrManager.RecvAddress()
+	return a.recvMgr.Address()
 }
 
 func (a *Account) ChangeAddress() *chain.Address {
-	return a.addrManager.ChangeAddress()
+	return a.changeMgr.Address()
 }
 
 func (a *Account) XPub() string {
@@ -171,7 +231,7 @@ func (a *Account) XPub() string {
 func (a *Account) GenerateReceiveAddress() (*chain.Address, uint32, error) {
 	var addr *chain.Address
 	err := a.engine.Transaction(func(tx walletdb.Transactor) error {
-		genAddr, err := a.addrManager.GenRecvAddress(tx)
+		genAddr, err := a.recvMgr.NextAddress(tx)
 		if err != nil {
 			return err
 		}
@@ -179,13 +239,13 @@ func (a *Account) GenerateReceiveAddress() (*chain.Address, uint32, error) {
 		addr = genAddr
 		return nil
 	})
-	return addr, a.addrManager.RecvDepth(), err
+	return addr, a.recvMgr.Depth(), err
 }
 
 func (a *Account) GenerateChangeAddress() (*chain.Address, uint32, error) {
 	var addr *chain.Address
 	err := a.engine.Transaction(func(tx walletdb.Transactor) error {
-		genAddr, err := a.addrManager.GenChangeAddress(tx)
+		genAddr, err := a.changeMgr.NextAddress(tx)
 		if err != nil {
 			return err
 		}
@@ -193,7 +253,7 @@ func (a *Account) GenerateChangeAddress() (*chain.Address, uint32, error) {
 		addr = genAddr
 		return nil
 	})
-	return addr, a.addrManager.ChangeDepth(), err
+	return addr, a.changeMgr.Depth(), err
 }
 
 func (a *Account) Coins() ([]*walletdb.Coin, error) {
@@ -225,7 +285,7 @@ func (a *Account) Names(count, offset int) ([]*walletdb.Name, error) {
 func (a *Account) History(name string, count, offset int) ([]*walletdb.RichNameHistoryEntry, error) {
 	var history []*walletdb.RichNameHistoryEntry
 	err := a.engine.Transaction(func(tx walletdb.Transactor) error {
-		hist, err := walletdb.GetNameHistory(tx, a.network, a.id, name, count, offset)
+		hist, err := walletdb.GetNameHistory(tx, a.id, name, count, offset)
 		if err != nil {
 			return err
 		}
@@ -238,7 +298,7 @@ func (a *Account) History(name string, count, offset int) ([]*walletdb.RichNameH
 func (a *Account) Transactions(count int, offset int) ([]*walletdb.RichTransaction, error) {
 	var txs []*walletdb.RichTransaction
 	err := a.engine.Transaction(func(q walletdb.Transactor) error {
-		t, err := walletdb.ListTransactions(q, a.id, a.network, count, offset)
+		t, err := walletdb.ListTransactions(q, a.id, count, offset)
 		if err != nil {
 			return err
 		}
@@ -284,7 +344,7 @@ func (a *Account) Open(name string, feeRate uint64) (*chain.Transaction, error) 
 	return a.txTransactor(func(dTx walletdb.Transactor) (*chain.Transaction, error) {
 		// TODO: double open
 
-		recvAddr := a.addrManager.RecvAddress()
+		recvAddr := a.recvMgr.Address()
 
 		txb := new(TxBuilder)
 		txb.AddOutput(&chain.Output{
@@ -336,7 +396,7 @@ func (a *Account) Bid(name string, feeRate, value, lockup uint64) (*chain.Transa
 		return nil, err
 	}
 
-	recvAddr := a.addrManager.RecvAddress()
+	recvAddr := a.recvMgr.Address()
 	blind := chain.CreateBlind(a.ring.PublicEK(), name, recvAddr, value)
 	txb := new(TxBuilder)
 	txb.AddOutput(&chain.Output{
@@ -364,10 +424,12 @@ func (a *Account) Bid(name string, feeRate, value, lockup uint64) (*chain.Transa
 			AccountID: a.id,
 			Name:      name,
 			Type:      walletdb.NameActionBid,
-			TxHash:    tx.IDHex(),
-			OutIdx:    0,
-			Value:     lockup,
-			BidValue:  value,
+			Outpoint: &chain.Outpoint{
+				Hash:  tx.ID(),
+				Index: 0,
+			},
+			Value:    lockup,
+			BidValue: value,
 		}
 		if err := walletdb.UpdateNameHistory(dTx, entry); err != nil {
 			return nil, err
@@ -419,22 +481,26 @@ func (a *Account) Redeem(name string, feeRate uint64) (*chain.Transaction, error
 	}
 
 	winner := state.Info.Owner
+	winnerOutpoint := &chain.Outpoint{
+		Hash:  winner.Hash,
+		Index: winner.Index,
+	}
 
 	return a.txTransactor(func(dTx walletdb.Transactor) (*chain.Transaction, error) {
-		localReveals, err := walletdb.GetRedeemableReveals(dTx, a.id, name)
+		coins, err := walletdb.GetRedeemableReveals(dTx, a.id, name)
 		if err != nil {
 			return nil, err
 		}
-		if len(localReveals) == 0 {
+		if len(coins) == 0 {
 			return nil, errors.New("no reveals to redeem")
 		}
 
-		losingReveals := make([]*walletdb.RedeemableReveal, 0)
-		for _, rev := range localReveals {
-			if rev.TxHash == winner.Hash && rev.OutIdx == winner.Index {
+		losingReveals := make([]*chain.Coin, 0)
+		for _, rev := range coins {
+			if rev.Prevout.Equal(winnerOutpoint) {
 				continue
 			}
-			losingReveals = append(losingReveals, rev)
+			losingReveals = append(losingReveals, rev.AsChain())
 		}
 
 		if len(losingReveals) == 0 {
@@ -462,51 +528,27 @@ func (a *Account) Transfer(name string, address *chain.Address, feeRate uint64) 
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
-	state, err := a.client.GetNameInfo(name)
+	state, err := a.requireNameState(name, "CLOSED")
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting id info")
-	}
-	if state.Info == nil {
-		return nil, errors.New("name must be opened")
-	}
-	if state.Info.State != "CLOSED" {
-		return nil, errors.New("auction is not closed")
+		return nil, err
 	}
 
 	var tx *chain.Transaction
 	err = a.engine.Transaction(func(q walletdb.Transactor) error {
-		owner := state.Info.Owner
-		ownerCoin, err := walletdb.GetCoinByOutpoint(q, a.id, owner.Hash, owner.Index)
-		if err == sql.ErrNoRows {
-			return errors.New("name is not owned by this wallet")
+		coin, err := walletdb.GetOwnedNameCoin(q, a.id, name)
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("you do not own this name")
 		}
 		if err != nil {
-			return errors.Wrap(err, "error getting transfer coin")
-		}
-
-		coin := ConvertDBCoin(ownerCoin)
-		cov := coin.Covenant
-		if cov.Type != chain.CovenantRegister &&
-			cov.Type != chain.CovenantUpdate &&
-			cov.Type != chain.CovenantRenew &&
-			cov.Type != chain.CovenantFinalize {
-			return errors.New("name must be registered")
+			return err
 		}
 
 		txb := new(TxBuilder)
-		txb.AddCoin(coin)
+		txb.AddCoin(coin.AsChain())
 		txb.AddOutput(&chain.Output{
-			Value:   coin.Value,
-			Address: coin.Address,
-			Covenant: &chain.Covenant{
-				Type: chain.CovenantTransfer,
-				Items: [][]byte{
-					chain.HashName(name),
-					bio.Uint32LE(uint32(state.Info.Height)),
-					{address.Version},
-					address.Hash,
-				},
-			},
+			Value:    coin.Value,
+			Address:  coin.Address,
+			Covenant: chain.NewTransferCovenant(name, state.Info.Height, address),
 		})
 
 		tx, err := a.fundTx(q, txb, feeRate)
@@ -523,33 +565,20 @@ func (a *Account) Finalize(name string, feeRate uint64) (*chain.Transaction, err
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
-	state, err := a.client.GetNameInfo(name)
+	state, err := a.requireNameState(name, "CLOSED")
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting id info")
-	}
-	if state.Info == nil {
-		return nil, errors.New("name must be opened")
-	}
-	if state.Info.State != "CLOSED" {
-		return nil, errors.New("auction is not closed")
+		return nil, err
 	}
 
 	var tx *chain.Transaction
 	err = a.engine.Transaction(func(q walletdb.Transactor) error {
-		owner := state.Info.Owner
-		ownerCoin, err := walletdb.GetCoinByOutpoint(q, a.id, owner.Hash, owner.Index)
-		if err == sql.ErrNoRows {
-			return errors.New("name is not owned by this wallet")
+		coin, err := walletdb.GetTransferCoin(q, a.id, name)
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("either you do not own this name or it is not transferring")
 		}
 		if err != nil {
-			return errors.Wrap(err, "error getting transfer coin")
+			return err
 		}
-
-		coin := ConvertDBCoin(ownerCoin)
-		if coin.Covenant.Type != chain.CovenantTransfer {
-			return errors.New("name is not being transferred")
-		}
-
 		if a.rescanHeight < coin.Height+a.network.TransferLockup {
 			return errors.New("transfer is still locked up")
 		}
@@ -560,37 +589,23 @@ func (a *Account) Finalize(name string, feeRate uint64) (*chain.Transaction, err
 			coin.Covenant.Items[3],
 		)
 
-		var flags uint8
-		if state.Info.Weak {
-			flags |= 1
-		}
-
-		renewalBlockRaw, err := a.client.GetRenewalBlock(a.network, a.rescanHeight)
+		renewalBlock, err := a.client.GetRenewalBlock(a.network, a.rescanHeight)
 		if err != nil {
-			return errors.Wrap(err, "error getting renewal block")
+			return err
 		}
 
-		renewalBlock := new(chain.Block)
-		if _, err := renewalBlock.ReadFrom(bytes.NewReader(renewalBlockRaw)); err != nil {
-			panic(err)
-		}
-
-		txb.AddCoin(coin)
+		txb.AddCoin(coin.AsChain())
 		txb.AddOutput(&chain.Output{
 			Value:   coin.Value,
 			Address: addr,
-			Covenant: &chain.Covenant{
-				Type: chain.CovenantFinalize,
-				Items: [][]byte{
-					chain.HashName(name),
-					bio.Uint32LE(uint32(state.Info.Height)),
-					[]byte(name),
-					{flags},
-					bio.Uint32LE(uint32(state.Info.Claimed)),
-					bio.Uint32LE(uint32(state.Info.Renewals)),
-					renewalBlock.Hash(),
-				},
-			},
+			Covenant: chain.NewFinalizeCovenant(
+				name,
+				state.Info.Weak,
+				renewalBlock.Hash(),
+				state.Info.Height,
+				state.Info.Claimed,
+				state.Info.Renewals,
+			),
 		})
 
 		tx, err := a.fundTx(q, txb, feeRate)
@@ -622,8 +637,7 @@ func (a *Account) Revoke(name string, feeRate uint64) (*chain.Transaction, error
 	}
 
 	return a.txTransactor(func(q walletdb.Transactor) (*chain.Transaction, error) {
-		owner := state.Info.Owner
-		ownerCoin, err := walletdb.GetCoinByOutpoint(q, a.id, owner.Hash, owner.Index)
+		coin, err := walletdb.GetRevocableNameCoin(q, a.id, name)
 		if err == sql.ErrNoRows {
 			return nil, errors.New("you do not own this name")
 		}
@@ -631,18 +645,8 @@ func (a *Account) Revoke(name string, feeRate uint64) (*chain.Transaction, error
 			return nil, err
 		}
 
-		coin := ConvertDBCoin(ownerCoin)
-		covType := coin.Covenant.Type
-		if covType != chain.CovenantRegister &&
-			covType != chain.CovenantUpdate &&
-			covType != chain.CovenantRenew &&
-			covType != chain.CovenantTransfer &&
-			covType != chain.CovenantFinalize {
-			return nil, errors.New("name must be registered")
-		}
-
 		txb := new(TxBuilder)
-		txb.AddCoin(coin)
+		txb.AddCoin(coin.AsChain())
 		txb.AddOutput(&chain.Output{
 			Value:   coin.Value,
 			Address: coin.Address,
@@ -660,6 +664,526 @@ func (a *Account) Revoke(name string, feeRate uint64) (*chain.Transaction, error
 			return nil, err
 		}
 		if err := a.sendTx(q, tx); err != nil {
+			return nil, err
+		}
+		return tx, nil
+	})
+}
+
+func (a *Account) TransferDutchAuctionListing(
+	name string,
+	feeRate uint64,
+) (*chain.Transaction, error) {
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+
+	state, err := a.requireNameState(name, "CLOSED")
+	if err != nil {
+		return nil, err
+	}
+
+	return a.txTransactor(func(dTx walletdb.Transactor) (*chain.Transaction, error) {
+		coin, err := walletdb.GetOwnedNameCoin(dTx, a.id, name)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("you do not own this name")
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		listingADdress := a.dutchMgr.Address()
+		txb := new(TxBuilder)
+		txb.AddCoin(coin.AsChain())
+		txb.AddOutput(&chain.Output{
+			Value:    coin.Value,
+			Address:  coin.Address,
+			Covenant: chain.NewTransferCovenant(name, state.Info.Height, listingADdress),
+		})
+
+		tx, err := a.fundTx(dTx, txb, feeRate)
+		if err != nil {
+			return nil, err
+		}
+
+		err = walletdb.TransferDutchAuctionListing(
+			dTx,
+			a.id,
+			name,
+			&chain.Outpoint{
+				Hash: tx.ID(),
+			},
+			listingADdress,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := a.sendTx(dTx, tx); err != nil {
+			return nil, err
+		}
+		return tx, nil
+	})
+}
+
+func (a *Account) FinalizeDutchAuctionListing(
+	name string,
+	feeRate uint64,
+) (*chain.Transaction, error) {
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+
+	state, err := a.requireNameState(name, "CLOSED")
+	if err != nil {
+		return nil, err
+	}
+
+	renewalBlock, err := a.client.GetRenewalBlock(a.network, a.rescanHeight)
+	if err != nil {
+		return nil, err
+	}
+
+	return a.txTransactor(func(dTx walletdb.Transactor) (*chain.Transaction, error) {
+		coin, err := walletdb.GetDutchAuctionTransferCoin(
+			dTx,
+			a.id,
+			name,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		txb := new(TxBuilder)
+		txb.AddCoin(coin.AsChain())
+		txb.AddOutput(&chain.Output{
+			Value: coin.Value,
+			Address: &chain.Address{
+				Version: coin.Covenant.Items[2][0],
+				Hash:    coin.Covenant.Items[3],
+			},
+			Covenant: chain.NewFinalizeCovenant(
+				name,
+				state.Info.Weak,
+				renewalBlock.Hash(),
+				state.Info.Height,
+				state.Info.Claimed,
+				state.Info.Renewals,
+			),
+		})
+
+		tx, err := a.fundTx(dTx, txb, feeRate)
+		if err != nil {
+			return nil, err
+		}
+
+		err = walletdb.FinalizeDutchAuctionListing(
+			dTx,
+			coin.Prevout,
+			&chain.Outpoint{
+				Hash: tx.ID(),
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := a.sendTx(dTx, tx); err != nil {
+			return nil, err
+		}
+
+		return tx, nil
+	})
+}
+
+func (a *Account) UpdateDutchAuctionListing(
+	name string,
+	startPrice,
+	endPrice uint64,
+	feeAddress *chain.Address,
+	feePercent float64,
+	numDecrements int,
+	decrementDurationSecs int64,
+) (*shakedex.DutchAuction, error) {
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+
+	var presigns *shakedex.DutchAuction
+	var err error
+	err = a.engine.Transaction(func(tx walletdb.Transactor) error {
+		coin, err := walletdb.GetTransferrableDutchAuctionCancelCoin(tx, a.id, name)
+		if err != nil {
+			return errors.New("no auction found")
+		}
+
+		privKey, err := a.ring.PrivateKey(coin.Derivation...)
+		if err != nil {
+			return err
+		}
+
+		paymentAddr := a.recvMgr.Address()
+		now := time.Now().Unix()
+		presigns, err = shakedex.CreateDutchAuction(
+			coin.Prevout,
+			coin.Value,
+			name,
+			now,
+			startPrice,
+			endPrice,
+			feePercent,
+			numDecrements,
+			time.Duration(decrementDurationSecs)*time.Second,
+			paymentAddr,
+			feeAddress,
+			privKey,
+		)
+		if err != nil {
+			return err
+		}
+		return walletdb.UpdateDutchAuctionListingParams(
+			tx,
+			name,
+			paymentAddr,
+			uint32(now),
+			startPrice,
+			endPrice,
+			feeAddress,
+			feePercent,
+			numDecrements,
+			decrementDurationSecs,
+		)
+	})
+	return presigns, err
+}
+
+func (a *Account) FillDutchAuction(
+	name string,
+	finalizeOutpoint *chain.Outpoint,
+	paymentAddress *chain.Address,
+	feeAddress *chain.Address,
+	publicKey []byte,
+	signature []byte,
+	lockTime uint32,
+	bid,
+	auctionFee,
+	feeRate uint64,
+) (*chain.Transaction, error) {
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+
+	state, err := a.requireNameState(name, "CLOSED")
+	if err != nil {
+		return nil, err
+	}
+
+	ownerOutpoint := &chain.Outpoint{
+		Hash:  state.Info.Owner.Hash,
+		Index: state.Info.Owner.Index,
+	}
+
+	if !ownerOutpoint.Equal(finalizeOutpoint) {
+		return nil, errors.New("locking script does not own name")
+	}
+
+	lockCoin, err := a.client.GetCoinByOutpoint(
+		finalizeOutpoint.Hash.String(),
+		int(finalizeOutpoint.Index),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if lockCoin.Covenant.Type != int(chain.CovenantFinalize) {
+		return nil, errors.New("locking coin is not a finalize")
+	}
+	if lockCoin.Covenant.Items[0] != chain.HashName(name).String() {
+		return nil, errors.New("locking coin is not for this name")
+	}
+	if time.Now().Unix() < int64(lockTime) {
+		return nil, errors.New("coin is locked")
+	}
+
+	auction := &shakedex.DutchAuction{
+		Name:            name,
+		LockingOutpoint: finalizeOutpoint,
+		PublicKey:       publicKey,
+		PaymentAddress:  paymentAddress,
+		FeeAddress:      feeAddress,
+		Bids: []*shakedex.DutchAuctionBid{
+			{
+				Value:     bid,
+				LockTime:  lockTime,
+				Fee:       auctionFee,
+				Signature: signature,
+			},
+		},
+	}
+	if !auction.VerifyAllBids(lockCoin.Value) {
+		return nil, errors.New("auction contains invalid bids")
+	}
+
+	lockCoinAddr, err := chain.NewAddressFromBech32(lockCoin.Address)
+	if err != nil {
+		return nil, err
+	}
+	lockCoinCovItems, err := bio.DecodeHexArray(lockCoin.Covenant.Items)
+	if err != nil {
+		return nil, err
+	}
+	lockCoinPrevoutHash, err := hex.DecodeString(lockCoin.Hash)
+	if err != nil {
+		return nil, err
+	}
+
+	txb := new(TxBuilder)
+	tmplTx, err := auction.TXTemplate(lockCoin.Value, 0)
+	if err != nil {
+		return nil, err
+	}
+	txb.AddCoin(&chain.Coin{
+		Version: uint8(lockCoin.Version),
+		Height:  lockCoin.Height,
+		Value:   lockCoin.Value,
+		Address: lockCoinAddr,
+		Covenant: &chain.Covenant{
+			Type:  chain.CovenantFinalize,
+			Items: lockCoinCovItems,
+		},
+		Prevout: &chain.Outpoint{
+			Hash:  lockCoinPrevoutHash,
+			Index: uint32(lockCoin.Index),
+		},
+		Coinbase: false,
+	})
+	txb.Locktime = tmplTx.LockTime
+	txb.Outputs = tmplTx.Outputs
+	txb.Witnesses = tmplTx.Witnesses
+
+	recvAddr := a.ReceiveAddress()
+	txb.Outputs[0].Covenant.Items = [][]byte{
+		chain.HashName(name),
+		bio.Uint32LE(uint32(state.Info.Height)),
+		{recvAddr.Version},
+		recvAddr.Hash,
+	}
+
+	return a.txTransactor(func(dTx walletdb.Transactor) (*chain.Transaction, error) {
+		tx, err := a.fundTx(dTx, txb, feeRate)
+		if err != nil {
+			return nil, err
+		}
+
+		// reorder to preserve singlereverse, then resign
+		if len(tx.Outputs) > len(tmplTx.Outputs) {
+			tx.Outputs[len(tx.Outputs)-1], tx.Outputs[len(tx.Outputs)-2] =
+				tx.Outputs[len(tx.Outputs)-2], tx.Outputs[len(tx.Outputs)-1]
+
+			for i := 1; i < len(txb.Coins); i++ {
+				pk, err := a.ring.PrivateKey(txb.Coins[i].Derivation...)
+				if err != nil {
+					return nil, err
+				}
+
+				newWitness, err := txscript.P2PKHWitnessSignature(
+					tx,
+					i,
+					txb.Coins[i].Value,
+					pk,
+				)
+				tx.Witnesses[i] = newWitness
+			}
+		}
+
+		if err := a.sendTx(dTx, tx); err != nil {
+			return nil, err
+		}
+		return tx, nil
+	})
+}
+
+func (a *Account) FinalizeDutchAuction(
+	name string,
+	feeRate uint64,
+) (*chain.Transaction, error) {
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+
+	state, err := a.requireNameState(name, "CLOSED")
+	if err != nil {
+		return nil, err
+	}
+
+	return a.txTransactor(func(dTx walletdb.Transactor) (*chain.Transaction, error) {
+		coin, err := walletdb.GetFinalizableDutchAuctionFillCoin(dTx, a.id, name)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("you did not win this auction")
+		}
+		if err != nil {
+			return nil, err
+		}
+		if a.rescanHeight < coin.Height+a.network.TransferLockup {
+			return nil, errors.New("transfer is still locked up")
+		}
+
+		var flags uint8
+		if state.Info.Weak {
+			flags |= 1
+		}
+
+		renewalBlock, err := a.client.GetRenewalBlock(a.network, a.rescanHeight)
+		if err != nil {
+			return nil, err
+		}
+
+		txb := new(TxBuilder)
+		txb.AddCoin(coin.AsChain())
+		txb.AddOutput(&chain.Output{
+			Value:   coin.Value,
+			Address: a.recvMgr.Address(),
+			Covenant: chain.NewFinalizeCovenant(
+				name,
+				state.Info.Weak,
+				renewalBlock.Hash(),
+				state.Info.Height,
+				state.Info.Claimed,
+				state.Info.Renewals,
+			),
+		})
+		prevTxDb, err := walletdb.GetTransactionByOutpoint(dTx, a.id, coin.Prevout.Hash)
+		if err != nil {
+			return nil, err
+		}
+		prevTx := new(chain.Transaction)
+		if _, err := prevTx.ReadFrom(bytes.NewReader(prevTxDb.Raw)); err != nil {
+			return nil, err
+		}
+		script := prevTx.Witnesses[coin.Prevout.Index].Items[1]
+		wit := &chain.Witness{
+			Items: [][]byte{
+				script,
+			},
+		}
+		txb.Witnesses = append(txb.Witnesses, wit)
+
+		tx, err := a.fundTx(dTx, txb, feeRate)
+		if err != nil {
+			return nil, err
+		}
+		if err := a.sendTx(dTx, tx); err != nil {
+			return nil, err
+		}
+		return tx, nil
+	})
+}
+
+func (a *Account) TransferDutchAuctionCancel(name string, feeRate uint64) (*chain.Transaction, error) {
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+
+	state, err := a.requireNameState(name, "CLOSED")
+	if err != nil {
+		return nil, err
+	}
+
+	return a.txTransactor(func(dTx walletdb.Transactor) (*chain.Transaction, error) {
+		coin, err := walletdb.GetTransferrableDutchAuctionCancelCoin(dTx, a.id, name)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("no auction found")
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		destAddress := a.recvMgr.Address()
+
+		txb := new(TxBuilder)
+		txb.AddCoin(coin.AsChain())
+		txb.AddOutput(&chain.Output{
+			Value:    coin.Value,
+			Address:  coin.Address,
+			Covenant: chain.NewTransferCovenant(name, state.Info.Height, destAddress),
+		})
+
+		privKey, err := a.ring.PrivateKey(coin.Derivation[0], coin.Derivation[1])
+		if err != nil {
+			return nil, err
+		}
+		wit, err := txscript.HIP1CancelWitnessSignature(txb.Build(), 0, coin.Value, privKey)
+		if err != nil {
+			return nil, err
+		}
+		txb.Witnesses = append(txb.Witnesses, wit)
+
+		tx, err := a.fundTx(dTx, txb, feeRate)
+		if err != nil {
+			return nil, err
+		}
+		if err := a.sendTx(dTx, tx); err != nil {
+			return nil, err
+		}
+		return tx, nil
+	})
+}
+
+func (a *Account) FinalizeDutchAuctionCancel(name string, feeRate uint64) (*chain.Transaction, error) {
+	a.mtx.Lock()
+	defer a.mtx.Unlock()
+
+	state, err := a.requireNameState(name, "CLOSED")
+	if err != nil {
+		return nil, err
+	}
+
+	return a.txTransactor(func(dTx walletdb.Transactor) (*chain.Transaction, error) {
+		coin, err := walletdb.GetFinalizableDutchAuctionCancelCoin(dTx, a.id, name)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("auction not found")
+		}
+		if err != nil {
+			return nil, err
+		}
+		if a.rescanHeight < coin.Height+a.network.TransferLockup {
+			return nil, errors.New("transfer is still locked up")
+		}
+
+		renewalBlock, err := a.client.GetRenewalBlock(a.network, a.rescanHeight)
+		if err != nil {
+			return nil, err
+		}
+
+		txb := new(TxBuilder)
+		txb.AddCoin(coin.AsChain())
+		txb.AddOutput(&chain.Output{
+			Value:   coin.Value,
+			Address: a.recvMgr.Address(),
+			Covenant: chain.NewFinalizeCovenant(
+				name,
+				state.Info.Weak,
+				renewalBlock.Hash(),
+				state.Info.Height,
+				state.Info.Claimed,
+				state.Info.Renewals,
+			),
+		})
+
+		prevTxDb, err := walletdb.GetTransactionByOutpoint(dTx, a.id, coin.Prevout.Hash)
+		if err != nil {
+			return nil, err
+		}
+		prevTx := new(chain.Transaction)
+		if _, err := prevTx.ReadFrom(bytes.NewReader(prevTxDb.Raw)); err != nil {
+			return nil, err
+		}
+		script := prevTx.Witnesses[coin.Prevout.Index].Items[1]
+		wit := &chain.Witness{
+			Items: [][]byte{
+				script,
+			},
+		}
+		txb.Witnesses = append(txb.Witnesses, wit)
+
+		tx, err := a.fundTx(dTx, txb, feeRate)
+		if err != nil {
+			return nil, err
+		}
+		if err := a.sendTx(dTx, tx); err != nil {
 			return nil, err
 		}
 		return tx, nil
@@ -703,7 +1227,7 @@ func (a *Account) Rescan(height int) error {
 func (a *Account) SignMessage(addr *chain.Address, msg []byte) (*btcec.Signature, error) {
 	var dbAddr *walletdb.Address
 	err := a.engine.Transaction(func(tx walletdb.Transactor) error {
-		dba, err := walletdb.GetAddress(tx, a.id, addr.String(a.network))
+		dba, err := walletdb.GetAddress(tx, a.id, addr)
 		if errors.Is(err, sql.ErrNoRows) {
 			return errors.New("address not found")
 		}
@@ -717,7 +1241,11 @@ func (a *Account) SignMessage(addr *chain.Address, msg []byte) (*btcec.Signature
 		return nil, err
 	}
 
-	key, err := a.ring.PrivateKey(uint32(dbAddr.Branch), uint32(dbAddr.Idx))
+	if dbAddr.Address.IsScriptHash() {
+		return nil, errors.New("cannot sign messages with script hash addresses")
+	}
+
+	key, err := a.ring.PrivateKey(dbAddr.Derivation...)
 	if err != nil {
 		return nil, err
 	}
@@ -737,7 +1265,10 @@ func (a *Account) SignMessageWithName(name string, msg []byte) (*btcec.Signature
 	var dbCoin *walletdb.Coin
 	err = a.engine.Transaction(func(tx walletdb.Transactor) error {
 		owner := info.Info.Owner
-		c, err := walletdb.GetCoinByOutpoint(tx, a.id, owner.Hash, owner.Index)
+		c, err := walletdb.GetCoinByPrevout(tx, a.id, &chain.Outpoint{
+			Hash:  owner.Hash,
+			Index: owner.Index,
+		})
 		if err != nil {
 			return err
 		}
@@ -748,7 +1279,7 @@ func (a *Account) SignMessageWithName(name string, msg []byte) (*btcec.Signature
 		return nil, err
 	}
 
-	return a.SignMessage(chain.MustAddressFromBech32(dbCoin.Address), msg)
+	return a.SignMessage(dbCoin.Address, msg)
 }
 
 func (a *Account) UnspentBids(count, offset int) ([]*UnspentBid, error) {
@@ -906,12 +1437,12 @@ func (a *Account) rescan(chainHeight int) error {
 
 		blocks, err := GetRawBlocksConcurrently(a.client, i, count)
 		if err != nil {
-			return errors.Wrap(err, "error fetching block")
+			return err
 		}
 
 		for resIdx, block := range blocks {
 			if err := a.scanBlock(resIdx+i, block); err != nil {
-				return errors.Wrap(err, "error processing block")
+				return err
 			}
 		}
 
@@ -951,7 +1482,7 @@ func (a *Account) scanBlock(height int, block *chain.Block) error {
 		}
 
 		for _, out := range tx.Outputs {
-			if a.addrManager.HasAddress(out.Address) {
+			if a.addrBloom.Test(out.Address) {
 				shouldScan = true
 				goto check
 			}
@@ -978,59 +1509,77 @@ check:
 	var coins int
 	err := a.engine.Transaction(func(dTx walletdb.Transactor) error {
 		for txIdx, tx := range block.Transactions {
-			var indexed bool
-			coinbase := bytes.Equal(tx.Inputs[0].Prevout.Hash, chain.ZeroHash)
+			var shouldIndexTx bool
+			coinbase := tx.Inputs[0].Prevout.Hash.IsZero()
 
 			for inIdx, input := range tx.Inputs {
 				if !a.outpointBloom.Test(input.Prevout) {
 					continue
 				}
 
-				if !indexed {
-					dbTx := &walletdb.Transaction{
-						Hash:        tx.IDHex(),
-						Idx:         txIdx,
-						BlockHeight: height,
-						BlockHash:   hex.EncodeToString(block.Hash()),
-						Raw:         tx.Bytes(),
-						Time:        int(block.Time),
-					}
-					if _, err := walletdb.UpsertTransaction(dTx, a.id, dbTx); err != nil {
-						return err
-					}
-					indexed = true
-				}
-
-				if err := a.scanInput(dTx, tx, txIdx, height, inIdx); err != nil {
+				indexedInput, err := a.scanInput(dTx, tx, height, txIdx, inIdx)
+				if err != nil {
 					return err
 				}
+				if !indexedInput {
+					continue
+				}
+				shouldIndexTx = true
 				spends++
 			}
 
 			for outIdx, out := range tx.Outputs {
-				if !a.addrManager.HasAddress(out.Address) {
+				if out.Covenant.Type == chain.CovenantTransfer {
+					indexedTransfer, err := a.scanTransfer(dTx, tx, outIdx)
+					if err != nil {
+						return err
+					}
+					if !indexedTransfer {
+						continue
+					}
+					shouldIndexTx = true
+					coins++
 					continue
 				}
 
-				if !indexed {
-					dbTx := &walletdb.Transaction{
-						Hash:        tx.IDHex(),
-						Idx:         txIdx,
-						BlockHeight: height,
-						BlockHash:   hex.EncodeToString(block.Hash()),
-						Raw:         tx.Bytes(),
-						Time:        int(block.Time),
-					}
-					if _, err := walletdb.UpsertTransaction(dTx, a.id, dbTx); err != nil {
+				if out.Covenant.Type == chain.CovenantFinalize {
+					indexedFinalize, err := a.scanFinalize(dTx, tx, outIdx)
+					if err != nil {
 						return err
 					}
-					indexed = true
+					if !indexedFinalize {
+						continue
+					}
+					shouldIndexTx = true
+					coins++
+					continue
+				}
+
+				if !a.addrBloom.Test(out.Address) {
+					continue
 				}
 
 				if err := a.scanOutput(dTx, tx, height, txIdx, outIdx, coinbase); err != nil {
 					return err
 				}
+				shouldIndexTx = true
 				coins++
+			}
+
+			if !shouldIndexTx {
+				continue
+			}
+
+			dbTx := &walletdb.Transaction{
+				Hash:        tx.IDHex(),
+				Idx:         txIdx,
+				BlockHeight: height,
+				BlockHash:   block.HashHex(),
+				Raw:         tx.Bytes(),
+				Time:        int(block.Time),
+			}
+			if _, err := walletdb.UpsertTransaction(dTx, a.id, dbTx); err != nil {
+				return err
 			}
 		}
 
@@ -1053,91 +1602,58 @@ check:
 	return nil
 }
 
-func (a *Account) scanInput(q walletdb.Transactor, tx *chain.Transaction, height, txIdx, inIdx int) error {
+func (a *Account) scanInput(q walletdb.Transactor, tx *chain.Transaction, height, txIdx, inIdx int) (bool, error) {
 	prevout := tx.Inputs[inIdx].Prevout
-	coin, err := walletdb.GetCoinByOutpoint(q, a.id, hex.EncodeToString(prevout.Hash), int(prevout.Index))
+	coin, err := walletdb.GetCoinByPrevout(q, a.id, prevout)
 	if errors.Is(err, sql.ErrNoRows) {
 		a.lgr.Warning(
-			"bloom filter false positive",
-			"account_name", a.name,
-			"prevout", fmt.Sprintf("%x/%d", prevout.Hash, prevout.Index),
+			"input bloom filter false positive",
+			"height", height,
+			"prevout", fmt.Sprintf("%s/%d", prevout.Hash, prevout.Index),
 		)
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return errors.Wrap(err, "error getting coin from DB")
+		return false, err
 	}
 
-	if coin.SpendingTxHash != "" {
-		a.lgr.Debug(
+	if coin.Spent {
+		a.lgr.Info(
 			"coin already spent",
 			"height", height,
 			"tx_idx", txIdx,
 			"input_idx", inIdx,
 			"addr", coin.Address,
-			"outpoint_tx_hash", hex.EncodeToString(prevout.Hash),
+			"outpoint_tx_hash", prevout.Hash.String(),
 			"outpoint_idx", prevout.Index,
 		)
-		return nil
+		return false, nil
 	}
 
-	a.lgr.Debug(
+	a.lgr.Info(
 		"found spend",
 		"height", height,
 		"tx_idx", txIdx,
 		"input_idx", inIdx,
-		"addr", coin.Address,
-		"outpoint_tx_hash", hex.EncodeToString(prevout.Hash),
+		"addr", coin.Address.String(),
+		"outpoint_tx_hash", prevout.Hash.String(),
 		"outpoint_idx", prevout.Index,
 	)
 
 	err = walletdb.UpdateCoinSpent(
 		q,
-		coin.ID,
-		tx.IDHex(),
+		coin.Prevout,
+		tx.ID(),
 	)
 	if err != nil {
-		return errors.Wrap(err, "error updating coin spent")
+		return false, err
 	}
-
-	pCoin := ConvertDBCoin(coin)
-	if pCoin.Covenant.Type != chain.CovenantTransfer {
-		return nil
-	}
-
-	nameHash := pCoin.Covenant.Items[0]
-	finalizeIdx := -1
-	for i, out := range tx.Outputs {
-		if out.Covenant.Type == chain.CovenantFinalize {
-			finalizeIdx = i
-			break
-		}
-	}
-
-	if finalizeIdx == -1 {
-		return nil
-	}
-
-	if err := walletdb.UpsertNameHash(q, a.id, nameHash, walletdb.NameStatusTransferred); err != nil {
-		return err
-	}
-
-	return walletdb.UpdateNameHistory(q, &walletdb.NameHistory{
-		AccountID:    a.id,
-		Type:         walletdb.NameActionFinalizeOut,
-		NameHash:     nameHash,
-		TxHash:       tx.IDHex(),
-		OutIdx:       finalizeIdx,
-		Value:        tx.Outputs[finalizeIdx].Value,
-		ParentTxHash: hex.EncodeToString(prevout.Hash),
-		ParentOutIdx: prevout.Index,
-	})
+	return true, nil
 }
 
 func (a *Account) scanOutput(q walletdb.Transactor, tx *chain.Transaction, height, txIdx, outIdx int, coinbase bool) error {
 	output := tx.Outputs[outIdx]
 	addr := output.Address
-	addrBech := addr.String(a.network)
 	lookAddr, err := a.checkAddrInDB(q, addr)
 	if err != nil {
 		return errors.Wrap(err, "error getting addr from DB")
@@ -1145,82 +1661,59 @@ func (a *Account) scanOutput(q walletdb.Transactor, tx *chain.Transaction, heigh
 
 	if lookAddr == nil {
 		a.lgr.Warning(
-			"bloom filter false positive",
-			"account_name", a.name,
-			"addr", addrBech,
+			"addressBloom filter false positive",
+			"addr", addr,
 		)
 		return nil
 	}
 
-	_, err = walletdb.GetCoinByOutpoint(q, a.id, tx.IDHex(), outIdx)
-	path := chain.Derivation{uint32(lookAddr.Branch), uint32(lookAddr.Idx)}
-	if err == nil {
-		a.lgr.Debug(
-			"coin already exists",
-			"height", height,
-			"tx_idx", txIdx,
-			"out_idx", outIdx,
-			"addr", addrBech,
-			"path", path,
-		)
-		return nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return errors.Wrap(err, "error checking coin existence")
-	}
-
-	a.lgr.Debug(
+	a.lgr.Info(
 		"found coin",
 		"height", height,
 		"tx_idx", txIdx,
 		"out_idx", outIdx,
-		"addr", addrBech,
-		"path", path,
+		"addr", addr,
+		"path", lookAddr.Derivation,
+		"value", output.Value,
 	)
 
-	if err := a.addrManager.IncLookahead(q, uint32(lookAddr.Branch), uint32(lookAddr.Idx)+1); err != nil {
-		return err
-	}
-
-	outpointBloomCopy := a.outpointBloom.Copy()
-	outpointBloomCopy.Add(&chain.Outpoint{
+	prevout := &chain.Outpoint{
 		Hash:  tx.ID(),
 		Index: uint32(outIdx),
-	})
-
-	err = walletdb.CreateCoin(q, &walletdb.CreateCoinOpts{
-		AccountID:     a.id,
-		TxHash:        tx.IDHex(),
-		OutIdx:        outIdx,
-		Value:         output.Value,
-		Address:       addr.String(a.network),
-		Coinbase:      coinbase,
-		CovenantType:  output.Covenant.Type.String(),
-		CovenantItems: output.Covenant.Items,
-	})
-
+	}
+	err = walletdb.CreateCoin(
+		q,
+		a.id,
+		prevout,
+		output.Value,
+		output.Address,
+		output.Covenant,
+		coinbase,
+		walletdb.CoinTypeDefault,
+	)
 	if err != nil {
 		return err
-	}
-
-	if err = walletdb.UpdateOutpointBloom(q, a.id, outpointBloomCopy.Bytes()); err != nil {
-		return errors.Wrap(err, "error updating account bloom filters")
 	}
 
 	if err := a.scanCovenant(q, tx, output, outIdx); err != nil {
 		return errors.Wrap(err, "error scanning covenants")
 	}
 
-	a.outpointBloom = outpointBloomCopy
+	if err := a.updateOutputBloom(q, lookAddr, tx, outIdx); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (a *Account) scanCovenant(q walletdb.Transactor, tx *chain.Transaction, out *chain.Output, outIdx int) error {
 	entry := &walletdb.NameHistory{
 		AccountID: a.id,
-		TxHash:    tx.IDHex(),
-		OutIdx:    outIdx,
-		Value:     out.Value,
+		Outpoint: &chain.Outpoint{
+			Hash:  tx.ID(),
+			Index: uint32(outIdx),
+		},
+		Value: out.Value,
 	}
 
 	switch out.Covenant.Type {
@@ -1240,47 +1733,28 @@ func (a *Account) scanCovenant(q walletdb.Transactor, tx *chain.Transaction, out
 		input := tx.Inputs[outIdx]
 		entry.NameHash = out.Covenant.Items[0]
 		entry.Type = walletdb.NameActionReveal
-		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
+		entry.ParentTxHash = input.Prevout.Hash.String()
 		entry.ParentOutIdx = input.Prevout.Index
 	case chain.CovenantRedeem:
 		input := tx.Inputs[outIdx]
 		entry.NameHash = out.Covenant.Items[0]
 		entry.Type = walletdb.NameActionRedeem
-		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
+		entry.ParentTxHash = input.Prevout.Hash.String()
 		entry.ParentOutIdx = input.Prevout.Index
 	case chain.CovenantRegister:
 		input := tx.Inputs[outIdx]
 		entry.NameHash = out.Covenant.Items[0]
 		entry.Type = walletdb.NameActionRegister
-		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
+		entry.ParentTxHash = input.Prevout.Hash.String()
 		entry.ParentOutIdx = input.Prevout.Index
 		if err := walletdb.UpsertNameHash(q, a.id, entry.NameHash, walletdb.NameStatusOwned); err != nil {
-			return err
-		}
-	case chain.CovenantTransfer:
-		input := tx.Inputs[outIdx]
-		entry.NameHash = out.Covenant.Items[0]
-		entry.Type = walletdb.NameActionTransfer
-		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
-		entry.ParentOutIdx = input.Prevout.Index
-		if err := walletdb.UpsertNameHash(q, a.id, entry.NameHash, walletdb.NameStatusTransferring); err != nil {
-			return err
-		}
-	case chain.CovenantFinalize:
-		input := tx.Inputs[outIdx]
-		name := string(out.Covenant.Items[2])
-		entry.Name = name
-		entry.Type = walletdb.NameActionFinalizeIn
-		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
-		entry.ParentOutIdx = input.Prevout.Index
-		if err := walletdb.UpsertName(q, a.id, entry.Name, walletdb.NameStatusOwned); err != nil {
 			return err
 		}
 	case chain.CovenantRevoke:
 		input := tx.Inputs[outIdx]
 		entry.NameHash = out.Covenant.Items[0]
 		entry.Type = walletdb.NameActionRevoke
-		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
+		entry.ParentTxHash = input.Prevout.Hash.String()
 		entry.ParentOutIdx = input.Prevout.Index
 		if err := walletdb.UpsertNameHash(q, a.id, entry.NameHash, walletdb.NameStatusRevoked); err != nil {
 			return err
@@ -1289,7 +1763,7 @@ func (a *Account) scanCovenant(q walletdb.Transactor, tx *chain.Transaction, out
 		input := tx.Inputs[outIdx]
 		entry.NameHash = out.Covenant.Items[0]
 		entry.Type = walletdb.NameActionUpdate
-		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
+		entry.ParentTxHash = input.Prevout.Hash.String()
 		entry.ParentOutIdx = input.Prevout.Index
 	default:
 		return nil
@@ -1298,9 +1772,319 @@ func (a *Account) scanCovenant(q walletdb.Transactor, tx *chain.Transaction, out
 	return errors.Wrap(walletdb.UpdateNameHistory(q, entry), "error saving name history")
 }
 
+func (a *Account) scanTransfer(q walletdb.Transactor, tx *chain.Transaction, outIdx int) (bool, error) {
+	output := tx.Outputs[outIdx]
+	transfereeAddr := &chain.Address{
+		Version: output.Covenant.Items[2][0],
+		Hash:    output.Covenant.Items[3],
+	}
+
+	var xferDirection string
+	var checkAddr *chain.Address
+	if a.addrBloom.Test(output.Address) {
+		xferDirection = "OUT"
+		checkAddr = output.Address
+	} else if a.addrBloom.Test(transfereeAddr) {
+		xferDirection = "IN"
+		checkAddr = transfereeAddr
+	} else {
+		return false, nil
+	}
+
+	matchAddr, err := a.checkAddrInDB(q, checkAddr)
+	if err != nil {
+		return false, err
+	}
+	if matchAddr == nil {
+		a.lgr.Warning("bloom filter false positive")
+		return false, nil
+	}
+
+	if xferDirection == "OUT" {
+		return a.scanOutgoingTransfer(q, matchAddr, transfereeAddr, tx, outIdx)
+	}
+
+	return a.scanIncomingTransfer(q, tx, outIdx)
+}
+
+func (a *Account) scanOutgoingTransfer(q walletdb.Transactor, matchAddr *walletdb.Address, transfereeAddr *chain.Address, tx *chain.Transaction, outIdx int) (bool, error) {
+	output := tx.Outputs[outIdx]
+	input := tx.Inputs[outIdx]
+	outpoint := &chain.Outpoint{
+		Hash:  tx.ID(),
+		Index: uint32(outIdx),
+	}
+	entry := &walletdb.NameHistory{
+		AccountID:    a.id,
+		NameHash:     output.Covenant.Items[0],
+		Outpoint:     outpoint,
+		Value:        output.Value,
+		ParentTxHash: input.Prevout.Hash.String(),
+		ParentOutIdx: input.Prevout.Index,
+	}
+
+	saveCoin := true
+	var coinType walletdb.CoinType
+
+	// transfer to a script address
+	if transfereeAddr.IsScriptHash() {
+		tfreeAddr, err := a.checkAddrInDB(q, transfereeAddr)
+		if err != nil {
+			return false, err
+		}
+		// transferring to one of our shakedex addresses
+		if tfreeAddr != nil && tfreeAddr.Derivation[0] == shakedex.AddressBranch {
+			entry.Type = walletdb.NameActionTransferDutchAuctionListing
+			coinType = walletdb.CoinTypeDutchAuctionListing
+		} else {
+			entry.Type = walletdb.NameActionTransfer
+		}
+	} else {
+		// transferring from one of our shakedex addresses
+		if matchAddr.Derivation[0] == shakedex.AddressBranch {
+			addr, err := a.checkAddrInDB(q, transfereeAddr)
+			if err != nil {
+				return false, err
+			}
+			// we don't know the recipient, so it's a shakedex fill
+			if addr == nil {
+				saveCoin = false
+				entry.Type = walletdb.NameActionFillDutchAuction
+				coinType = walletdb.CoinTypeDutchAuctionFill
+			} else {
+				// if we know the recipient, it's a cancel
+				entry.Type = walletdb.NameActionTransferDutchAuctionCancel
+				coinType = walletdb.CoinTypeDutchAuctionCancel
+			}
+		} else {
+			entry.Type = walletdb.NameActionTransfer
+		}
+	}
+
+	if err := a.updateOutputBloom(q, matchAddr, tx, outIdx); err != nil {
+		return false, err
+	}
+
+	if saveCoin {
+		err := walletdb.CreateCoin(
+			q,
+			a.id,
+			outpoint,
+			output.Value,
+			output.Address,
+			output.Covenant,
+			false,
+			coinType,
+		)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	if entry.Type == walletdb.NameActionTransfer {
+		if err := walletdb.UpsertNameHash(q, a.id, output.Covenant.Items[0], walletdb.NameStatusTransferring); err != nil {
+			return false, err
+		}
+	}
+
+	if err := walletdb.UpdateNameHistory(q, entry); err != nil {
+		return false, err
+	}
+	return saveCoin, nil
+}
+
+func (a *Account) scanIncomingTransfer(q walletdb.Transactor, tx *chain.Transaction, outIdx int) (bool, error) {
+	input := tx.Inputs[outIdx]
+	output := tx.Outputs[outIdx]
+
+	if !txscript.IsHIP1LockingScript(tx.Witnesses[outIdx]) {
+		return false, nil
+	}
+
+	_, err := walletdb.GetCoinByPrevout(q, a.id, input.Prevout)
+	if err == nil {
+		return false, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return false, err
+	}
+
+	// we only care about people transferring
+	// in shakedex fills here
+
+	name, err := a.client.GetNameByHash(output.Covenant.Items[0])
+	if err != nil {
+		return false, err
+	}
+
+	outpoint := &chain.Outpoint{
+		Hash:  tx.ID(),
+		Index: uint32(outIdx),
+	}
+	err = walletdb.CreateCoin(
+		q,
+		a.id,
+		outpoint,
+		output.Value,
+		output.Address,
+		output.Covenant,
+		false,
+		walletdb.CoinTypeDutchAuctionFill,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	entry := &walletdb.NameHistory{
+		AccountID: a.id,
+		Name:      name,
+		NameHash:  output.Covenant.Items[0],
+		Type:      walletdb.NameActionTransferFillDutchAuction,
+		Outpoint:  outpoint,
+	}
+	if err := walletdb.UpdateNameHistory(q, entry); err != nil {
+		return false, err
+	}
+	return true, err
+}
+
+func (a *Account) scanFinalize(q walletdb.Transactor, tx *chain.Transaction, outIdx int) (bool, error) {
+	input := tx.Inputs[outIdx]
+	output := tx.Outputs[outIdx]
+
+	if a.addrBloom.Test(output.Address) {
+		addr, err := a.checkAddrInDB(q, output.Address)
+		if err != nil {
+			return false, err
+		}
+		if addr == nil {
+			return false, nil
+		}
+		return a.scanIncomingFinalize(q, tx, outIdx)
+	}
+
+	if !a.outpointBloom.Test(input.Prevout) {
+		return false, nil
+	}
+
+	return false, a.scanOutgoingFinalize(q, tx, outIdx)
+}
+
+func (a *Account) scanIncomingFinalize(q walletdb.Transactor, tx *chain.Transaction, outIdx int) (bool, error) {
+	input := tx.Inputs[outIdx]
+	output := tx.Outputs[outIdx]
+	outpoint := &chain.Outpoint{
+		Hash:  tx.ID(),
+		Index: uint32(outIdx),
+	}
+	entry := &walletdb.NameHistory{
+		AccountID:    a.id,
+		Name:         string(output.Covenant.Items[2]),
+		NameHash:     output.Covenant.Items[0],
+		Outpoint:     outpoint,
+		Value:        output.Value,
+		ParentTxHash: input.Prevout.Hash.String(),
+		ParentOutIdx: input.Prevout.Index,
+	}
+
+	var coinType walletdb.CoinType
+	if txscript.IsHIP1LockingScript(tx.Witnesses[outIdx]) {
+		coin, err := walletdb.GetCoinByPrevout(q, a.id, input.Prevout)
+		if err != nil {
+			return false, err
+		}
+		_, err = walletdb.GetAddress(q, a.id, coin.Address)
+		if errors.Is(err, sql.ErrNoRows) {
+			coinType = walletdb.CoinTypeDutchAuctionFill
+			entry.Type = walletdb.NameActionFinalizeFillDutchAuction
+			if err := walletdb.UpsertName(q, a.id, entry.Name, walletdb.NameStatusOwned); err != nil {
+				return false, nil
+			}
+		} else if err == nil {
+			if output.Address.IsScriptHash() {
+				coinType = walletdb.CoinTypeDutchAuctionListing
+				entry.Type = walletdb.NameActionFinalizeDutchAuctionListing
+			} else {
+				coinType = walletdb.CoinTypeDutchAuctionCancel
+				entry.Type = walletdb.NameActionFinalizeDutchAuctionCancel
+			}
+		} else {
+			return false, err
+		}
+	} else {
+		if output.Address.IsScriptHash() {
+			entry.Type = walletdb.NameActionFinalizeDutchAuctionListing
+			coinType = walletdb.CoinTypeDutchAuctionListing
+		} else {
+			addr, err := a.checkAddrInDB(q, output.Address)
+			if err != nil {
+				return false, err
+			}
+			if err := a.updateOutputBloom(q, addr, tx, outIdx); err != nil {
+				return false, err
+			}
+			entry.Type = walletdb.NameActionFinalizeIn
+			if err := walletdb.UpsertName(q, a.id, entry.Name, walletdb.NameStatusOwned); err != nil {
+				return false, nil
+			}
+		}
+	}
+
+	err := walletdb.CreateCoin(
+		q,
+		a.id,
+		outpoint,
+		output.Value,
+		output.Address,
+		output.Covenant,
+		false,
+		coinType,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	if err := walletdb.UpdateNameHistory(q, entry); err != nil {
+		return false, err
+	}
+	return true, err
+}
+
+func (a *Account) scanOutgoingFinalize(q walletdb.Transactor, tx *chain.Transaction, outIdx int) error {
+	input := tx.Inputs[outIdx]
+	output := tx.Outputs[outIdx]
+	outpoint := &chain.Outpoint{
+		Hash:  tx.ID(),
+		Index: uint32(outIdx),
+	}
+
+	_, err := walletdb.GetCoinByPrevout(q, a.id, input.Prevout)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	name := string(output.Covenant.Items[2])
+	if err := walletdb.UpsertName(q, a.id, name, walletdb.NameStatusTransferred); err != nil {
+		return nil
+	}
+
+	entry := &walletdb.NameHistory{
+		AccountID:    a.id,
+		Type:         walletdb.NameActionFinalizeOut,
+		Name:         name,
+		Outpoint:     outpoint,
+		Value:        output.Value,
+		ParentTxHash: input.Prevout.Hash.String(),
+		ParentOutIdx: input.Prevout.Index,
+	}
+	return walletdb.UpdateNameHistory(q, entry)
+}
+
 func (a *Account) checkAddrInDB(q walletdb.Querier, addr *chain.Address) (*walletdb.Address, error) {
-	addrBech := addr.String(a.network)
-	dbAddr, err := walletdb.GetAddress(q, a.id, addrBech)
+	dbAddr, err := walletdb.GetAddress(q, a.id, addr)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -1331,21 +2115,12 @@ func (a *Account) sendReveals(dTx walletdb.Transactor, bids []*walletdb.Revealab
 	var tx *chain.Transaction
 	var err error
 	txb := new(TxBuilder)
-	coins := make([]*chain.Coin, len(bids))
-	for i, bid := range bids {
-		bidCoin, err := walletdb.GetCoinByOutpoint(dTx, a.id, bid.TxHash, bid.OutIdx)
-		if err != nil {
-			return nil, err
-		}
-
-		coin := ConvertDBCoin(bidCoin)
-		nonce := chain.GenerateNonce(a.ring.PublicEK(), name, coin.Address, bid.BidValue)
-		coins[i] = coin
-
-		txb.AddCoin(coin)
+	for _, bid := range bids {
+		nonce := chain.GenerateNonce(a.ring.PublicEK(), name, bid.Coin.Address, bid.Value)
+		txb.AddCoin(bid.Coin.AsChain())
 		txb.AddOutput(&chain.Output{
-			Value:   bid.BidValue,
-			Address: chain.MustAddressFromBech32(bidCoin.Address),
+			Value:   bid.Value,
+			Address: bid.Coin.Address,
 			Covenant: &chain.Covenant{
 				Type: chain.CovenantReveal,
 				Items: [][]byte{
@@ -1365,23 +2140,14 @@ func (a *Account) sendReveals(dTx walletdb.Transactor, bids []*walletdb.Revealab
 	return tx, a.sendTx(dTx, tx)
 }
 
-func (a *Account) sendRedeems(dTx walletdb.Transactor, reveals []*walletdb.RedeemableReveal, name string, nsHeight int, feeRate uint64) (*chain.Transaction, error) {
+func (a *Account) sendRedeems(dTx walletdb.Transactor, coins []*chain.Coin, name string, nsHeight int, feeRate uint64) (*chain.Transaction, error) {
 	var tx *chain.Transaction
 	var err error
 	txb := new(TxBuilder)
-	coins := make([]*chain.Coin, len(reveals))
-	for i, rev := range reveals {
-		revCoin, err := walletdb.GetCoinByOutpoint(dTx, a.id, rev.TxHash, rev.OutIdx)
-		if err != nil {
-			return nil, err
-		}
-
-		coin := ConvertDBCoin(revCoin)
-		coins[i] = coin
-
+	for _, coin := range coins {
 		txb.AddCoin(coin)
 		txb.AddOutput(&chain.Output{
-			Value:   revCoin.Value,
+			Value:   coin.Value,
 			Address: coin.Address,
 			Covenant: &chain.Covenant{
 				Type: chain.CovenantRedeem,
@@ -1414,62 +2180,35 @@ func (a *Account) sendUpdate(q walletdb.Transactor, name string, resource *chain
 		return nil, err
 	}
 
-	revCoin, err := walletdb.GetCoinByOutpoint(q, a.id, state.Info.Owner.Hash, state.Info.Owner.Index)
+	coin, err := walletdb.GetCoinByPrevout(q, a.id, &chain.Outpoint{
+		Hash:  state.Info.Owner.Hash,
+		Index: state.Info.Owner.Index,
+	})
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errors.New("you did not win this auction")
+		return nil, errors.New("you do not own this name")
 	}
-	if revCoin.SpendingTxHash != "" {
+	if coin.Spent {
 		return nil, errors.New("name is already registered")
 	}
 
-	buf := new(bytes.Buffer)
-	if resource == nil {
-		buf.WriteByte(0x00)
-	} else {
-		if _, err := resource.WriteTo(buf); err != nil {
-			return nil, errors.Wrap(err, "error serializing resource")
-		}
-	}
-
 	txb := new(TxBuilder)
-	coin := ConvertDBCoin(revCoin)
-	txb.AddCoin(coin)
-
+	txb.AddCoin(coin.AsChain())
 	if hasName {
 		txb.AddOutput(&chain.Output{
-			Value:   uint64(state.Info.Value),
-			Address: chain.MustAddressFromBech32(revCoin.Address),
-			Covenant: &chain.Covenant{
-				Type: chain.CovenantUpdate,
-				Items: [][]byte{
-					chain.HashName(name),
-					bio.Uint32LE(uint32(state.Info.Height)),
-					buf.Bytes(),
-				},
-			},
+			Value:    coin.Value,
+			Address:  coin.Address,
+			Covenant: chain.NewUpdateCovenant(name, state.Info.Height, resource),
 		})
 	} else {
-		renewalBlockB, err := a.client.GetRenewalBlock(a.network, state.Info.Height)
+		renewalBlock, err := a.client.GetRenewalBlock(a.network, state.Info.Height)
 		if err != nil {
-			return nil, errors.New("error getting renewal block")
-		}
-		renewalBlock := new(chain.Block)
-		if _, err := renewalBlock.ReadFrom(bytes.NewReader(renewalBlockB)); err != nil {
-			return nil, errors.New("error parsing renewal block")
+			return nil, err
 		}
 
 		txb.AddOutput(&chain.Output{
-			Value:   uint64(state.Info.Value),
-			Address: chain.MustAddressFromBech32(revCoin.Address),
-			Covenant: &chain.Covenant{
-				Type: chain.CovenantRegister,
-				Items: [][]byte{
-					chain.HashName(name),
-					bio.Uint32LE(uint32(state.Info.Height)),
-					buf.Bytes(),
-					renewalBlock.Hash(),
-				},
-			},
+			Value:    uint64(state.Info.Value),
+			Address:  coin.Address,
+			Covenant: chain.NewRegisterCovenant(name, state.Info.Height, renewalBlock.Hash(), resource),
 		})
 	}
 
@@ -1493,30 +2232,22 @@ func (a *Account) sendRenewal(q walletdb.Transactor, name string, feeRate uint64
 		return nil, err
 	}
 
-	inCoin, err := walletdb.GetCoinByOutpoint(q, a.id, state.Info.Owner.Hash, state.Info.Owner.Index)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, errors.New("you do not own this name")
-	}
-	coin := ConvertDBCoin(inCoin)
-	covType := coin.Covenant.Type
-	if covType != chain.CovenantRegister &&
-		covType != chain.CovenantUpdate &&
-		covType != chain.CovenantRenew &&
-		covType != chain.CovenantFinalize {
-		return nil, errors.New("name must be registered")
+	coin, err := walletdb.GetOwnedNameCoin(q, a.id, name)
+	if err != nil {
+		return nil, err
 	}
 
 	if a.rescanHeight < state.Info.Renewal+a.network.TreeInterval {
 		return nil, errors.New("must wait to renew")
 	}
 
-	renewalBlock, err := a.getRenewalBlock(state.Info.Height)
+	renewalBlock, err := a.client.GetRenewalBlock(a.network, state.Info.Height)
 	if err != nil {
 		return nil, err
 	}
 
 	txb := new(TxBuilder)
-	txb.AddCoin(coin)
+	txb.AddCoin(coin.AsChain())
 	txb.AddOutput(&chain.Output{
 		Value:   coin.Value,
 		Address: coin.Address,
@@ -1561,10 +2292,10 @@ func (a *Account) fundTx(q walletdb.Querier, txb *TxBuilder, feeRate uint64) (*c
 
 	coins := make([]*chain.Coin, len(dbCoins))
 	for i := 0; i < len(dbCoins); i++ {
-		coins[i] = ConvertDBCoin(dbCoins[i])
+		coins[i] = dbCoins[i].AsChain()
 	}
 
-	changeAddr := a.addrManager.ChangeAddress()
+	changeAddr := a.changeMgr.Address()
 	if err := txb.Fund(coins, changeAddr, feeRate); err != nil {
 		return nil, err
 	}
@@ -1591,11 +2322,25 @@ func (a *Account) sendTx(dTx walletdb.Transactor, tx *chain.Transaction) error {
 	}
 
 	for i := range tx.Inputs {
-		if err := a.scanInput(dTx, tx, -1, 0, i); err != nil {
+		if _, err := a.scanInput(dTx, tx, -1, 0, i); err != nil {
 			return errors.Wrap(err, "error scanning input")
 		}
 	}
-	for i := range tx.Outputs {
+	for i, out := range tx.Outputs {
+		if out.Covenant.Type == chain.CovenantTransfer {
+			if _, err := a.scanTransfer(dTx, tx, i); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if out.Covenant.Type == chain.CovenantFinalize {
+			if _, err := a.scanFinalize(dTx, tx, i); err != nil {
+				return err
+			}
+			continue
+		}
+
 		if err := a.scanOutput(dTx, tx, -1, 0, i, false); err != nil {
 			return errors.Wrap(err, "error scanning input")
 		}
@@ -1639,18 +2384,6 @@ func (a *Account) txTransactor(cb func(dTx walletdb.Transactor) (*chain.Transact
 	return tx, err
 }
 
-func (a *Account) getRenewalBlock(height int) (*chain.Block, error) {
-	renewalBlockB, err := a.client.GetRenewalBlock(a.network, height)
-	if err != nil {
-		return nil, errors.New("error getting renewal block")
-	}
-	renewalBlock := new(chain.Block)
-	if _, err := renewalBlock.ReadFrom(bytes.NewReader(renewalBlockB)); err != nil {
-		return nil, errors.New("error parsing renewal block")
-	}
-	return renewalBlock, nil
-}
-
 func (a *Account) requireNameState(name string, expState string) (*client.NameInfoRes, error) {
 	state, err := a.client.GetNameInfo(name)
 	if err != nil {
@@ -1676,4 +2409,60 @@ func (a *Account) requireNameState(name string, expState string) (*client.NameIn
 	}
 
 	return state, nil
+}
+
+func (a *Account) updateOutputBloom(q walletdb.Transactor, addr *walletdb.Address, tx *chain.Transaction, outIdx int) error {
+	var mgr *AddressManager
+	switch addr.Derivation[0] {
+	case chain.ReceiveBranch:
+		mgr = a.recvMgr
+	case chain.ChangeBranch:
+		mgr = a.changeMgr
+	case shakedex.AddressBranch:
+		mgr = a.dutchMgr
+	default:
+		return errors.New("unknown address, should not happen")
+	}
+
+	if err := mgr.SetAddressIdx(q, addr.Derivation[1]); err != nil {
+		return err
+	}
+
+	prevout := &chain.Outpoint{
+		Hash:  tx.ID(),
+		Index: uint32(outIdx),
+	}
+	outpointBloomCopy := a.outpointBloom.Copy()
+	outpointBloomCopy.Add(prevout)
+
+	if err := walletdb.UpdateOutpointBloom(q, a.id, outpointBloomCopy.Bytes()); err != nil {
+		return errors.Wrap(err, "error updating account addressBloom filters")
+	}
+
+	a.outpointBloom = outpointBloomCopy
+	return nil
+}
+
+func ValidateAccountID(id string) error {
+	if len(id) == 0 {
+		return errors.New("account ID cannot be empty")
+	}
+
+	if len(id) > 64 {
+		return errors.New("account ID cannot be more than 64 characters")
+	}
+
+	if !accIDRegex.MatchString(id) {
+		return errors.New("account ID can only contain letters, numbers, -, _, and . characters")
+	}
+
+	return nil
+}
+
+func init() {
+	var err error
+	accIDRegex, err = regexp.Compile("^[\\w\\d\\-_.]+$")
+	if err != nil {
+		panic(err)
+	}
 }

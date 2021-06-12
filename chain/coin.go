@@ -1,15 +1,14 @@
 package chain
 
 type Coin struct {
-	Version     uint8
-	Height      int
-	Value       uint64
-	Address     *Address
-	Covenant    *Covenant
-	Prevout     *Outpoint
-	Coinbase    bool
-	WitnessType WitnessType
-	Derivation  []uint32
+	Version    uint8
+	Height     int
+	Value      uint64
+	Address    *Address
+	Covenant   *Covenant
+	Prevout    *Outpoint
+	Coinbase   bool
+	Derivation Derivation
 }
 
 func (c *Coin) Equal(other *Coin) bool {

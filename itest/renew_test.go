@@ -22,8 +22,8 @@ func (s *RenewSuite) SetupTest() {
 	s.hsd = startHSD()
 	s.client, s.cleanup = startDaemon(t)
 
-	_, err := s.client.CreateWallet(&api.CreateWalletReq{
-		Name:     "alice",
+	_, err := s.client.CreateAccount(&api.CreateAccountReq{
+		ID:       "alice",
 		Password: "password",
 	})
 	require.NoError(t, err)
@@ -31,39 +31,39 @@ func (s *RenewSuite) SetupTest() {
 	err = s.client.Unlock("alice", "password")
 	require.NoError(t, err)
 
-	info, err := s.client.GetAccount("alice", "default")
+	info, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, 1, info.ReceiveAddress)
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.CoinbaseMaturity, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 3)
+	awaitHeight(t, s.client, "alice", 3)
 
-	_, err = s.client.Open("alice", "default", s.name, 100, false)
+	_, err = s.client.Open("alice", s.name, 100, false)
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.TreeInterval+2, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 10)
+	awaitHeight(t, s.client, "alice", 10)
 
-	_, err = s.client.Bid("alice", "default", s.name, 100, 1000000, 2000000, false)
+	_, err = s.client.Bid("alice", s.name, 100, 1000000, 2000000, false)
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.BiddingPeriod, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 15)
+	awaitHeight(t, s.client, "alice", 15)
 
-	_, err = s.client.Reveal("alice", "default", s.name, 100, false)
+	_, err = s.client.Reveal("alice", s.name, 100, false)
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.RevealPeriod, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 15+chain.NetworkRegtest.RevealPeriod)
+	awaitHeight(t, s.client, "alice", 15+chain.NetworkRegtest.RevealPeriod)
 
-	_, err = s.client.Update("alice", "default", s.name, nil, 100, false)
+	_, err = s.client.Update("alice", s.name, nil, 100, false)
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, 1, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 16+chain.NetworkRegtest.RevealPeriod)
+	awaitHeight(t, s.client, "alice", 16+chain.NetworkRegtest.RevealPeriod)
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.TreeInterval, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 21+chain.NetworkRegtest.RevealPeriod)
+	awaitHeight(t, s.client, "alice", 21+chain.NetworkRegtest.RevealPeriod)
 }
 
 func (s *RenewSuite) TearDownTest() {
@@ -73,7 +73,7 @@ func (s *RenewSuite) TearDownTest() {
 
 func (s *RenewSuite) TestRenewOK() {
 	t := s.T()
-	_, err := s.client.Renew("alice", "default", s.name, 100, false)
+	_, err := s.client.Renew("alice", s.name, 100, false)
 	require.NoError(t, err)
 }
 

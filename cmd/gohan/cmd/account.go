@@ -10,7 +10,6 @@ import (
 )
 
 var (
-	walletID   string
 	accountID  string
 	createOnly bool
 )
@@ -24,7 +23,7 @@ var accountInfoCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.GetAccount(walletID, accountID)
+		res, err := client.GetAccount(accountID)
 		if err != nil {
 			return err
 		}
@@ -58,7 +57,7 @@ var accountTxsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.GetAccountTransactions(walletID, accountID, perPage, (page-1)*perPage)
+		res, err := client.GetAccountTransactions(accountID, perPage, (page-1)*perPage)
 		if err != nil {
 			return err
 		}
@@ -74,7 +73,7 @@ var accountNamesCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.GetNames(walletID, accountID)
+		res, err := client.GetNames(accountID)
 		if err != nil {
 			return err
 		}
@@ -92,7 +91,7 @@ var accountNameHistoryCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.GetName(walletID, accountID, name)
+		res, err := client.GetName(accountID, name)
 		if err != nil {
 			return err
 		}
@@ -128,7 +127,7 @@ var accountSendCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.Send(walletID, accountID, uint64(amountHNS*1000000), feeRate, args[0], createOnly)
+		res, err := client.Send(accountID, uint64(amountHNS*1000000), feeRate, args[0], createOnly)
 		if err != nil {
 			return err
 		}
@@ -155,7 +154,7 @@ var accountOpenCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.Open(walletID, accountID, name, feeRate, createOnly)
+		res, err := client.Open(accountID, name, feeRate, createOnly)
 		if err != nil {
 			return err
 		}
@@ -192,7 +191,6 @@ var accountBidCmd = &cobra.Command{
 			return err
 		}
 		res, err := client.Bid(
-			walletID,
 			accountID,
 			name,
 			feeRate,
@@ -227,7 +225,7 @@ var accountRevealCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.Reveal(walletID, accountID, name, feeRate, createOnly)
+		res, err := client.Reveal(accountID, name, feeRate, createOnly)
 		if err != nil {
 			return err
 		}
@@ -255,7 +253,7 @@ var accountRedeemCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.Redeem(walletID, accountID, name, feeRate, createOnly)
+		res, err := client.Redeem(accountID, name, feeRate, createOnly)
 		if err != nil {
 			return err
 		}
@@ -292,7 +290,7 @@ var accountUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.Update(walletID, accountID, name, resource, feeRate, createOnly)
+		res, err := client.Update(accountID, name, resource, feeRate, createOnly)
 		if err != nil {
 			return err
 		}
@@ -323,7 +321,7 @@ var accountTransferCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.Transfer(walletID, accountID, name, args[1], feeRate, createOnly)
+		res, err := client.Transfer(accountID, name, args[1], feeRate, createOnly)
 		if err != nil {
 			return err
 		}
@@ -350,7 +348,7 @@ var accountFinalizeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.Finalize(walletID, accountID, name, feeRate, createOnly)
+		res, err := client.Finalize(accountID, name, feeRate, createOnly)
 		if err != nil {
 			return err
 		}
@@ -366,7 +364,7 @@ var accountZapCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := client.Zap(walletID, accountID); err != nil {
+		if err := client.Zap(accountID); err != nil {
 			return err
 		}
 		fmt.Println("OK")
@@ -388,7 +386,7 @@ var accountRescanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := client.Rescan(walletID, accountID, heightInt); err != nil {
+		if err := client.Rescan(accountID, heightInt); err != nil {
 			return err
 		}
 		fmt.Printf("Rescanning from block %d.\n", heightInt)
@@ -405,7 +403,7 @@ var accountSignMessageCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		sig, err := client.SignMessage(walletID, accountID, args[0], args[1])
+		sig, err := client.SignMessage(accountID, args[0], args[1])
 		if err != nil {
 			return err
 		}
@@ -423,7 +421,7 @@ var accountSignMessageWithNameCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		sig, err := client.SignMessageWithName(walletID, accountID, args[0], args[1])
+		sig, err := client.SignMessageWithName(accountID, args[0], args[1])
 		if err != nil {
 			return err
 		}
@@ -453,7 +451,7 @@ var accountUnspentBidsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.UnspentBids(walletID, accountID, count, offset)
+		res, err := client.UnspentBids(accountID, count, offset)
 		if err != nil {
 			return err
 		}
@@ -482,7 +480,7 @@ var accountUnspentRevealsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		res, err := client.UnspentReveals(walletID, accountID, count, offset)
+		res, err := client.UnspentReveals(accountID, count, offset)
 		if err != nil {
 			return err
 		}

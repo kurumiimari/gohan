@@ -25,7 +25,7 @@ var unlockCmd = &cobra.Command{
 			return errors.Wrap(err, "error reading password")
 		}
 
-		err = client.Unlock(walletID, string(pwB))
+		err = client.Unlock(accountID, string(pwB))
 		if err == nil {
 			fmt.Println("Wallet unlocked.")
 		}
@@ -41,7 +41,7 @@ var lockCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		err = client.Lock(walletID)
+		err = client.Lock(accountID)
 		if err == nil {
 			fmt.Println("Wallet locked.")
 		}

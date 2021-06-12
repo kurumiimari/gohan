@@ -1,15 +1,20 @@
 package client
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"github.com/kurumiimari/gohan/chain"
+	"github.com/kurumiimari/gohan/ghttp"
 	"github.com/pkg/errors"
 	"github.com/ybbus/jsonrpc/v2"
 )
 
 type NodeRPCClient struct {
-	client jsonrpc.RPCClient
+	url       string
+	apiKey    string
+	rpcClient jsonrpc.RPCClient
 }
 
 type BatchRawBlockRes struct {
@@ -22,12 +27,12 @@ type BatchNameInfoRes struct {
 	Error error
 }
 
-func NewNodeRPCClient(url string, apiKey string) *NodeRPCClient {
-	var client jsonrpc.RPCClient
+func NewNodeClient(url string, apiKey string) *NodeRPCClient {
+	var rpcClient jsonrpc.RPCClient
 	if apiKey == "" {
-		client = jsonrpc.NewClient(url)
+		rpcClient = jsonrpc.NewClient(url)
 	} else {
-		client = jsonrpc.NewClientWithOpts(url, &jsonrpc.RPCClientOpts{
+		rpcClient = jsonrpc.NewClientWithOpts(url, &jsonrpc.RPCClientOpts{
 			CustomHeaders: map[string]string{
 				"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("x:"+apiKey)),
 			},
@@ -35,13 +40,15 @@ func NewNodeRPCClient(url string, apiKey string) *NodeRPCClient {
 	}
 
 	return &NodeRPCClient{
-		client: client,
+		url:       url,
+		apiKey:    apiKey,
+		rpcClient: rpcClient,
 	}
 }
 
 func (c *NodeRPCClient) GetRawBlock(height int) ([]byte, error) {
 	var blockHex string
-	err := c.client.CallFor(&blockHex, "getblockbyheight", height, false, false)
+	err := c.rpcClient.CallFor(&blockHex, "getblockbyheight", height, false, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting raw block")
 	}
@@ -57,7 +64,7 @@ func (c *NodeRPCClient) GetRawBlocksBatch(start, count int) ([]*BatchRawBlockRes
 			ID:     i,
 		})
 	}
-	batchRes, err := c.client.CallBatch(reqs)
+	batchRes, err := c.rpcClient.CallBatch(reqs)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -94,17 +101,26 @@ func (c *NodeRPCClient) GetRawBlocksBatch(start, count int) ([]*BatchRawBlockRes
 	return blocksRes, nil
 }
 
-func (c *NodeRPCClient) GetRenewalBlock(network *chain.Network, height int) ([]byte, error) {
+func (c *NodeRPCClient) GetRenewalBlock(network *chain.Network, height int) (*chain.Block, error) {
 	height = height - network.RenewalMaturity
 	if height < 0 {
 		height = 0
 	}
-	return c.GetRawBlock(height)
+	blockRaw, err := c.GetRawBlock(height)
+	if err != nil {
+		return nil, err
+	}
+
+	block := new(chain.Block)
+	if _, err := block.ReadFrom(bytes.NewReader(blockRaw)); err != nil {
+		return nil, err
+	}
+	return block, nil
 }
 
 func (c *NodeRPCClient) GetNameInfo(name string) (*NameInfoRes, error) {
 	res := new(NameInfoRes)
-	err := c.client.CallFor(res, "getnameinfo", name)
+	err := c.rpcClient.CallFor(res, "getnameinfo", name)
 	return res, errors.Wrap(err, "error getting name info")
 }
 
@@ -117,7 +133,7 @@ func (c *NodeRPCClient) BatchGetNameInfo(names []string) ([]*BatchNameInfoRes, e
 			ID:     i,
 		}
 	}
-	batchRes, err := c.client.CallBatch(reqs)
+	batchRes, err := c.rpcClient.CallBatch(reqs)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -148,29 +164,49 @@ func (c *NodeRPCClient) BatchGetNameInfo(names []string) ([]*BatchNameInfoRes, e
 
 func (c *NodeRPCClient) GetInfo() (*InfoRes, error) {
 	res := new(InfoRes)
-	err := c.client.CallFor(res, "getinfo")
+	err := c.rpcClient.CallFor(res, "getinfo")
 	return res, errors.Wrap(err, "error getting node info")
 }
 
 func (c *NodeRPCClient) SendRawTransaction(tx []byte) (string, error) {
 	var hash string
-	err := c.client.CallFor(&hash, "sendrawtransaction", hex.EncodeToString(tx))
+	err := c.rpcClient.CallFor(&hash, "sendrawtransaction", hex.EncodeToString(tx))
 	return hash, errors.Wrap(err, "error sending raw transaction")
 }
 
 func (c *NodeRPCClient) GetRawMempool() ([]string, error) {
 	var entries []string
-	err := c.client.CallFor(&entries, "getrawmempool")
+	err := c.rpcClient.CallFor(&entries, "getrawmempool")
 	return entries, errors.Wrap(err, "error getting raw mempool")
 }
 
 func (c *NodeRPCClient) GenerateToAddress(n int, address string) error {
-	_, err := c.client.Call("generatetoaddress", n, address)
+	_, err := c.rpcClient.Call("generatetoaddress", n, address)
 	return errors.Wrap(err, "error generating to address")
 }
 
 func (c *NodeRPCClient) EstimateSmartFee(n int) (uint64, error) {
 	var fee float64
-	_, err := c.client.Call("estimatesmartfee", n)
+	_, err := c.rpcClient.Call("estimatesmartfee", n)
 	return uint64(fee * 1000000), errors.Wrap(err, "error estimating smart fee")
+}
+
+func (c *NodeRPCClient) GetCoinByOutpoint(txHash string, idx int) (*CoinRes, error) {
+	res := new(CoinRes)
+	err := c.doRestGet(fmt.Sprintf("coin/%s/%d", txHash, idx), res)
+	return res, err
+}
+
+func (c *NodeRPCClient) GetNameByHash(hash []byte) (string, error) {
+	var res string
+	err := c.rpcClient.CallFor(&res, "getnamebyhash", hex.EncodeToString(hash))
+	return res, err
+}
+
+func (c *NodeRPCClient) doRestGet(path string, resObj interface{}) error {
+	return ghttp.DefaultClient.DoGetJSON(
+		fmt.Sprintf("%s/%s", c.url, path),
+		resObj,
+		ghttp.WithBasicAuth("x", c.apiKey),
+	)
 }

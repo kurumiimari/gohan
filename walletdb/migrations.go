@@ -24,29 +24,21 @@ type Migration struct {
 var Migrations = []*Migration{
 	{
 		Query: `
-CREATE TABLE wallets (
-	id VARCHAR NOT NULL PRIMARY KEY,
-	seed VARCHAR NOT NULL,
-	watch_only BOOLEAN NOT NULL
-);
-`,
-		Name: "create_wallets",
-	},
-	{
-		Query: `
 CREATE TABLE accounts (
 	id VARCHAR NOT NULL PRIMARY KEY,
-	name VARCHAR NOT NULL,
-	wallet_id VARCHAR NOT NULL,
+	seed VARCHAR NOT NULL,
+	watch_only BOOLEAN NOT NULL,
 	idx INTEGER NOT NULL,
 	change_idx INTEGER NOT NULL DEFAULT 0,
-	receiving_idx INTEGER NOT NULL DEFAULT 0,
+	recv_idx INTEGER NOT NULL DEFAULT 0,
+	dutch_auction_idx INTEGER NOT NULL DEFAULT 0,
 	xpub VARCHAR(111) NOT NULL,
 	rescan_height INTEGER NOT NULL DEFAULT 0,
     address_bloom BLOB NOT NULL,
-	outpoint_bloom BLOB NOT NULL,
-	FOREIGN KEY (wallet_id) REFERENCES wallets(id)
+	outpoint_bloom BLOB NOT NULL
 );
+
+CREATE UNIQUE INDEX idx_uniq_accounts_xpub ON accounts(xpub);
 `,
 		Name: "create_accounts",
 	},
@@ -89,9 +81,11 @@ CREATE TABLE coins (
 	value INTEGER NOT NULL,
 	address VARCHAR NOT NULL,
 	coinbase BOOLEAN NOT NULL,
-	covenant_type VARCHAR NOT NULL,
+	covenant_type INTEGER NOT NULL,
 	covenant_items BLOB,
+	name_hash VARCHAR,
 	spending_tx_hash VARCHAR(64),
+	type VARCHAR NOT NULL,
 	FOREIGN KEY (account_id) REFERENCES accounts(id),
 	FOREIGN KEY (tx_hash) REFERENCES transactions(hash),
 	FOREIGN KEY (spending_tx_hash) REFERENCES transactions(hash),
@@ -99,6 +93,7 @@ CREATE TABLE coins (
 );
 
 CREATE INDEX idx_coins_tx_hash ON coins(tx_hash);
+CREATE UNIQUE INDEX idx_uniq_coins_outpoint ON coins(account_id, tx_hash, out_idx);
 `,
 		Name: "create_coins",
 	},
@@ -143,7 +138,7 @@ CREATE UNIQUE INDEX idx_uniq_name_history_outpoint ON name_history(account_id, t
 		Name: "create_name_history",
 	},
 	{
-		Query:`
+		Query: `
 CREATE TABLE block_checkpoints (
 	height INTEGER NOT NULL PRIMARY KEY,
 	hash VARCHAR NOT NULL
@@ -152,6 +147,39 @@ CREATE TABLE block_checkpoints (
 CREATE INDEX idx_block_checkpoints_hash ON block_checkpoints(hash);
 `,
 		Name: "create_block_checkpoints",
+	},
+	{
+		Query: `
+CREATE TABLE dutch_auction_listings(
+	id INTEGER NOT NULL PRIMARY KEY,
+	account_id VARCHAR NOT NULL,
+	name VARCHAR NOT NULL,
+	transfer_listing_tx_hash VARCHAR NOT NULL,
+	transfer_listing_out_idx VARCHAR NOT NULL,
+	listing_address VARCHAR NOT NULL,
+	finalize_listing_tx_hash VARCHAR,
+	finalize_listing_out_idx INTEGER,
+	fill_tx_hash VARCHAR,
+	fill_out_idx INTEGER,
+	fill_price INTEGER,
+	transfer_cancel_tx_hash VARCHAR,
+	transfer_cancel_out_idx INTEGER,
+	finalize_cancel_tx_hash VARCHAR,
+	finalize_cancel_out_idx INTEGER,
+	payment_address VARCHAR,
+	fee_address VARCHAR,
+	lock_time INTEGER,
+	start_price INTEGER,
+	end_price INTEGER,
+	fee_percent NUMERIC,
+	num_decrements INTEGER,
+	decrement_duration_secs INTEGER
+);
+
+CREATE UNIQUE INDEX idx_uniq_dutch_auction_listings_transfer_outpoint
+ON dutch_auction_listings(transfer_listing_tx_hash, transfer_listing_out_idx); 
+`,
+		Name: "create_dutch_auction_listings",
 	},
 }
 

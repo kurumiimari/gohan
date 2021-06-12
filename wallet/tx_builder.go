@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"github.com/kurumiimari/gohan/bio"
 	"github.com/kurumiimari/gohan/chain"
+	"github.com/kurumiimari/gohan/txscript"
 	"github.com/pkg/errors"
-	"github.com/kurumiimari/gohan/walletdb"
 )
 
 type WitnessFactory func(coins []*chain.Coin, tx *chain.Transaction) (*chain.Witness, error)
@@ -27,20 +27,20 @@ func (b *TxBuilder) AddOutput(output *chain.Output) {
 }
 
 func (b *TxBuilder) Sign(ring Keyring) error {
+	tx := b.Build()
 	for i, coin := range b.Coins {
-		var wit *chain.Witness
-		var err error
-		switch coin.WitnessType {
-		case chain.WitnessTypeP2PKH:
-			wit, err = b.buildP2PKHWitness(i, ring)
-		default:
-			panic("unknown witness type")
+		if i < len(b.Witnesses) {
+			continue
 		}
 
+		key, err := ring.PrivateKey(coin.Derivation...)
 		if err != nil {
 			return err
 		}
-
+		wit, err := txscript.P2PKHWitnessSignature(tx, i, coin.Value, key)
+		if err != nil {
+			return err
+		}
 		b.Witnesses = append(b.Witnesses, wit)
 	}
 	return nil
@@ -52,7 +52,7 @@ func (b *TxBuilder) Build() *chain.Transaction {
 		Inputs:    make([]*chain.Input, len(b.Coins)),
 		Witnesses: make([]*chain.Witness, len(b.Witnesses)),
 		Outputs:   b.Outputs,
-		Locktime:  b.Locktime,
+		LockTime:  b.Locktime,
 	}
 	for i, coin := range b.Coins {
 		tx.Inputs[i] = &chain.Input{
@@ -160,44 +160,4 @@ func (b *TxBuilder) Fund(fundingCoins []*chain.Coin, changeAddress *chain.Addres
 	}
 
 	return errors.New("insufficient funds")
-}
-
-func (b *TxBuilder) buildP2PKHWitness(i int, ring Keyring) (*chain.Witness, error) {
-	tx := b.Build()
-	coin := b.Coins[i]
-	sigHash := tx.SignatureHash(
-		b.Coins,
-		i,
-		chain.NewP2PKHScript(coin.Address.Hash),
-		chain.SighashAll,
-	)
-	key, err := ring.PrivateKey(coin.Derivation...)
-	if err != nil {
-		return nil, errors.Wrap(err, "error deriving p2pkh private key")
-	}
-	sig, err := key.Sign(sigHash)
-	if err != nil {
-		return nil, errors.Wrap(err, "error signing p2pkh")
-	}
-	return chain.NewP2PKHWitness(sig, chain.SighashAll, key.PubKey()), nil
-}
-
-func ConvertDBCoin(dbCoin *walletdb.Coin) *chain.Coin {
-	return &chain.Coin{
-		Version: 0,
-		Height:  dbCoin.BlockHeight,
-		Value:   dbCoin.Value,
-		Address: chain.MustAddressFromBech32(dbCoin.Address),
-		Covenant: &chain.Covenant{
-			Type:  chain.NewCovenantTypeFromString(dbCoin.CovenantType),
-			Items: dbCoin.CovenantItems,
-		},
-		Prevout: &chain.Outpoint{
-			Hash:  bio.MustDecodeHex(dbCoin.TxHash),
-			Index: uint32(dbCoin.OutIdx),
-		},
-		Coinbase:    dbCoin.Coinbase,
-		WitnessType: chain.WitnessTypeP2PKH,
-		Derivation:  []uint32{dbCoin.AddressBranch, dbCoin.AddressIndex},
-	}
 }

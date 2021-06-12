@@ -32,9 +32,9 @@ var importCmd = &cobra.Command{
 		password := string(pwB)
 
 		if importCmdWatchOnly {
-			return handleWatchOnly(client, password, walletID)
+			return handleWatchOnly(client, password, accountID)
 		}
-		return handleMnemonic(client, password, walletID)
+		return handleMnemonic(client, password, accountID)
 	},
 }
 
@@ -48,8 +48,8 @@ func handleMnemonic(client *api.Client, password, name string) error {
 	}
 
 	fmt.Print("Creating wallet... ")
-	_, err = client.CreateWallet(&api.CreateWalletReq{
-		Name:     name,
+	_, err = client.CreateAccount(&api.CreateAccountReq{
+		ID:       name,
 		Mnemonic: string(mnemonicB),
 		Password: password,
 	})
@@ -70,8 +70,8 @@ func handleWatchOnly(client *api.Client, password, name string) error {
 	}
 
 	fmt.Print("Creating wallet... ")
-	_, err = client.CreateWallet(&api.CreateWalletReq{
-		Name:     name,
+	_, err = client.CreateAccount(&api.CreateAccountReq{
+		ID:       name,
 		XPub:     string(xPubB),
 		Password: password,
 	})

@@ -12,6 +12,22 @@ var (
 	ErrInvalidPassword = errors.New("invalid password")
 )
 
+type PrivateKeyer interface {
+	PrivateKey(path ...uint32) (*btcec.PrivateKey, error)
+}
+
+type EKPrivateKeyer struct {
+	ek chain.ExtendedKey
+}
+
+func NewEKPrivateKeyer(ek chain.ExtendedKey) PrivateKeyer {
+	return &EKPrivateKeyer{ek: ek}
+}
+
+func (e EKPrivateKeyer) PrivateKey(path ...uint32) (*btcec.PrivateKey, error) {
+	return chain.DeriveExtendedKey(e.ek, path...).PrivateKey()
+}
+
 type KeyLocker struct {
 	box     SecretBox
 	ek      chain.ExtendedKey
@@ -47,7 +63,7 @@ func (k *KeyLocker) Lock() {
 	k.ek = nil
 }
 
-func (k *KeyLocker) IsLocked() bool {
+func (k *KeyLocker) Locked() bool {
 	k.mtx.Lock()
 	defer k.mtx.Unlock()
 	return k.ek == nil
@@ -63,10 +79,6 @@ func (k *KeyLocker) PrivateKey(path ...uint32) (*btcec.PrivateKey, error) {
 	return chain.DeriveExtendedKey(k.ek, path...).PrivateKey()
 }
 
-type PrivateKeyer interface {
-	PrivateKey(path ...uint32) (*btcec.PrivateKey, error)
-}
-
 type Keyring interface {
 	PrivateKeyer
 	IsPrivate() bool
@@ -80,20 +92,17 @@ type AccountKeyring struct {
 	priv    PrivateKeyer
 	pub     chain.ExtendedKey
 	network *chain.Network
-	index   uint32
 }
 
 func NewAccountKeyring(
 	priv PrivateKeyer,
 	pub chain.ExtendedKey,
 	network *chain.Network,
-	index uint32,
 ) *AccountKeyring {
 	return &AccountKeyring{
 		priv:    priv,
 		pub:     pub,
 		network: network,
-		index:   index,
 	}
 }
 
@@ -110,7 +119,7 @@ func (k *AccountKeyring) PublicKey(path ...uint32) *btcec.PublicKey {
 }
 
 func (k *AccountKeyring) PrivateKey(path ...uint32) (*btcec.PrivateKey, error) {
-	return k.priv.PrivateKey(k.joinPaths(path)...)
+	return k.priv.PrivateKey(path...)
 }
 
 func (k *AccountKeyring) XPub(path ...uint32) string {
@@ -119,15 +128,4 @@ func (k *AccountKeyring) XPub(path ...uint32) string {
 
 func (k *AccountKeyring) Address(path ...uint32) *chain.Address {
 	return k.PublicEK(path...).Address()
-}
-
-func (k *AccountKeyring) joinPaths(path []uint32) []uint32 {
-	var out []uint32
-	out = append(out, []uint32{
-		chain.HardenNode(chain.CoinPurpose),
-		chain.HardenNode(k.network.KeyPrefix.CoinType),
-		chain.HardenNode(k.index),
-	}...)
-	out = append(out, path...)
-	return out
 }

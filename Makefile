@@ -31,6 +31,9 @@ clean:
 	rm -rf ./bin
 .PHONY: clean
 
+fmt:
+	go fmt ./...
+
 test:
 	IS_TEST=1 go test -v ./...
 .PHONY: test/l

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/kurumiimari/gohan/bio"
+	"github.com/kurumiimari/gohan/gcrypto"
 	"github.com/pkg/errors"
 	"io"
 )
@@ -161,13 +162,9 @@ func (c *Covenant) UnmarshalJSON(bytes []byte) error {
 		return err
 	}
 
-	items := make([][]byte, len(jsonCov.Items))
-	for i, item := range jsonCov.Items {
-		b, err := hex.DecodeString(item)
-		if err != nil {
-			return err
-		}
-		items[i] = b
+	items, err := bio.DecodeHexArray(jsonCov.Items)
+	if err != nil {
+		return err
 	}
 
 	c.Type = CovenantType(jsonCov.Type)
@@ -190,4 +187,78 @@ func (c *Covenant) Equal(other *Covenant) bool {
 	}
 
 	return true
+}
+
+func NewRegisterCovenant(name string, height int, renewalHash gcrypto.Hash, resource *Resource) *Covenant {
+	buf := new(bytes.Buffer)
+	if resource == nil {
+		buf.WriteByte(0x00)
+	} else {
+		if _, err := resource.WriteTo(buf); err != nil {
+			panic(err)
+		}
+	}
+
+	return &Covenant{
+		Type: CovenantRegister,
+		Items: [][]byte{
+			HashName(name),
+			bio.Uint32LE(uint32(height)),
+			buf.Bytes(),
+			renewalHash,
+		},
+	}
+}
+
+func NewUpdateCovenant(name string, height int, resource *Resource) *Covenant {
+	buf := new(bytes.Buffer)
+	if resource == nil {
+		buf.WriteByte(0x00)
+	} else {
+		if _, err := resource.WriteTo(buf); err != nil {
+			panic(err)
+		}
+	}
+
+	return &Covenant{
+		Type: CovenantUpdate,
+		Items: [][]byte{
+			HashName(name),
+			bio.Uint32LE(uint32(height)),
+			buf.Bytes(),
+		},
+	}
+}
+
+
+func NewTransferCovenant(name string, height int, transferee *Address) *Covenant {
+	return &Covenant{
+		Type: CovenantTransfer,
+		Items: [][]byte{
+			HashName(name),
+			bio.Uint32LE(uint32(height)),
+			{transferee.Version},
+			transferee.Hash,
+		},
+	}
+}
+
+func NewFinalizeCovenant(name string, weak bool, renewalHash gcrypto.Hash, height, claimed, renewals int) *Covenant {
+	var flags uint8
+	if weak {
+		flags |= 1
+	}
+
+	return &Covenant{
+		Type: CovenantFinalize,
+		Items: [][]byte{
+			HashName(name),
+			bio.Uint32LE(uint32(height)),
+			[]byte(name),
+			{flags},
+			bio.Uint32LE(uint32(claimed)),
+			bio.Uint32LE(uint32(renewals)),
+			renewalHash,
+		},
+	}
 }

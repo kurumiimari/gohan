@@ -46,7 +46,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&prefix, "prefix", "~/.gohan", "Sets gohan's data directory")
 	rootCmd.PersistentFlags().StringVarP(&network, "network", "n", "main", "Set's gohan's network")
 	rootCmd.PersistentFlags().StringVarP(&serverURL, "server-url", "u", "", "Sets a custom node RPC server url")
-	rootCmd.PersistentFlags().StringVarP(&walletID, "wallet-id", "w", "primary", "Sets the wallet ID")
 	rootCmd.PersistentFlags().StringVarP(&accountID, "account-id", "a", "default", "Sets the account ID")
 	rootCmd.PersistentFlags().StringVar(&walletAPIKey, "api-key", "", "Sets the wallet's API key.")
 	rootCmd.PersistentFlags().StringVar(&nodeAPIKey, "node-api-key", "", "Sets the Handshake full node's API key.")

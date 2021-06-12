@@ -1,15 +1,14 @@
 package chain
 
 import (
-	"fmt"
 	"github.com/kurumiimari/gohan/bio"
 	"github.com/pkg/errors"
 	"io"
 )
 
 type Input struct {
-	Prevout  *Outpoint
-	Sequence uint32
+	Prevout  *Outpoint `json:"prevout"`
+	Sequence uint32    `json:"sequence"`
 }
 
 func (i *Input) WriteTo(w io.Writer) (int64, error) {
@@ -30,16 +29,4 @@ func (i *Input) ReadFrom(r io.Reader) (int64, error) {
 	i.Prevout = prevout
 	i.Sequence = seq
 	return g.N, nil
-}
-
-func (i *Input) MarshalJSON() ([]byte, error) {
-	prevout, err := i.Prevout.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-	return []byte(fmt.Sprintf(
-		`{"prevout":%s,"sequence":%d}`,
-		string(prevout),
-		i.Sequence,
-	)), nil
 }

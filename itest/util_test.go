@@ -69,14 +69,13 @@ func startDaemon(t *testing.T) (*api.Client, func()) {
 func awaitHeight(
 	t *testing.T,
 	apiClient *api.Client,
-	walletID string,
 	accountID string,
 	targetHeight int,
 ) {
 	var info *api.AccountGetRes
 	var err error
 	for i := 0; i < 10; i++ {
-		info, err = apiClient.GetAccount(walletID, accountID)
+		info, err = apiClient.GetAccount(accountID)
 		require.NoError(t, err)
 
 		if info.RescanHeight == targetHeight {

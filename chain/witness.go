@@ -21,7 +21,7 @@ type Witness struct {
 
 func NewP2PKHWitness(sig *btcec.Signature, sigOpts SigOpt, pub *btcec.PublicKey) *Witness {
 	sigB := make([]byte, 65)
-	copy(sigB[:], SerializeRawSignature(sig))
+	copy(sigB[:], SerializeSignature(sig))
 	sigB[64] = byte(sigOpts)
 
 	return &Witness{

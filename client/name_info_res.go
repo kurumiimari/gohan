@@ -1,5 +1,7 @@
 package client
 
+import "github.com/kurumiimari/gohan/gcrypto"
+
 type NameStart struct {
 	Reserved bool `json:"reserved"`
 	Week     int  `json:"week"`
@@ -7,14 +9,14 @@ type NameStart struct {
 }
 
 type NameInfo struct {
-	Name     string `json:"name"`
-	NameHash string `json:"nameHash"`
-	State    string `json:"state"`
-	Height   int    `json:"height"`
-	Renewal  int    `json:"renewal"`
+	Name     string       `json:"name"`
+	NameHash gcrypto.Hash `json:"nameHash"`
+	State    string       `json:"state"`
+	Height   int          `json:"height"`
+	Renewal  int          `json:"renewal"`
 	Owner    struct {
-		Hash  string `json:"hash"`
-		Index int    `json:"index"`
+		Hash  gcrypto.Hash `json:"hash"`
+		Index uint32       `json:"index"`
 	} `json:"owner"`
 	Value      int    `json:"value"`
 	Highest    int    `json:"highest"`

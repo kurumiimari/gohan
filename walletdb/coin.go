@@ -2,43 +2,48 @@ package walletdb
 
 import (
 	"bytes"
-	"database/sql"
 	"database/sql/driver"
 	"github.com/kurumiimari/gohan/bio"
 	"github.com/kurumiimari/gohan/chain"
+	"github.com/kurumiimari/gohan/gcrypto"
 	"github.com/pkg/errors"
 )
 
-type CreateCoinOpts struct {
-	AccountID     string
-	TxHash        string
-	OutIdx        int
-	Value         uint64
-	Address       string
-	Coinbase      bool
-	CovenantType  string
-	CovenantItems [][]byte
-}
+type CoinType uint8
+
+const (
+	CoinTypeDefault CoinType = iota
+	CoinTypeDutchAuctionListing
+	CoinTypeDutchAuctionFill
+	CoinTypeDutchAuctionCancel
+)
 
 type Coin struct {
-	ID                  int
-	AccountID           string
-	BlockHeight         int
-	BlockHash           string
-	TxIdx               int
-	TxHash              string
-	OutIdx              int
-	Value               uint64
-	Address             string
-	AddressBranch       uint32
-	AddressIndex        uint32
-	Coinbase            bool
-	CovenantType        string
-	CovenantItems       [][]byte
-	SpendingBlockHeight int
-	SpendingBlockHash   string
-	SpendingTxIdx       int
-	SpendingTxHash      string
+	AccountID string
+	Spent     bool
+	NameHash  gcrypto.Hash
+	Type      CoinType
+
+	Height     int
+	Value      uint64
+	Address    *chain.Address
+	Covenant   *chain.Covenant
+	Prevout    *chain.Outpoint
+	Coinbase   bool
+	Derivation chain.Derivation
+}
+
+func (c *Coin) AsChain() *chain.Coin {
+	return &chain.Coin{
+		Version:    0,
+		Height:     c.Height,
+		Value:      c.Value,
+		Address:    c.Address,
+		Covenant:   c.Covenant,
+		Prevout:    c.Prevout,
+		Coinbase:   c.Coinbase,
+		Derivation: c.Derivation,
+	}
 }
 
 type SQLCovenantItems [][]byte
@@ -46,7 +51,7 @@ type SQLCovenantItems [][]byte
 func (s *SQLCovenantItems) Scan(src interface{}) error {
 	switch src.(type) {
 	case nil:
-		*s = nil
+		*s = make([][]byte, 0)
 		return nil
 	case []byte:
 		b := src.([]byte)
@@ -79,7 +84,21 @@ func (s SQLCovenantItems) Value() (driver.Value, error) {
 	return buf.Bytes(), nil
 }
 
-func CreateCoin(tx Transactor, opts *CreateCoinOpts) error {
+func CreateCoin(
+	tx Transactor,
+	accountID string,
+	prevout *chain.Outpoint,
+	value uint64,
+	address *chain.Address,
+	covenant *chain.Covenant,
+	coinbase bool,
+	coinType CoinType,
+) error {
+	var nameHash gcrypto.Hash
+	if covenant.Type > 1 {
+		nameHash = covenant.Items[0]
+	}
+
 	_, err := tx.Exec(`
 INSERT INTO coins(
 	account_id,
@@ -87,29 +106,33 @@ INSERT INTO coins(
 	out_idx,
 	value,
 	address,
-	coinbase,
 	covenant_type,
-	covenant_items
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	covenant_items,
+	coinbase,
+	name_hash,
+	type
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (account_id, tx_hash, out_idx) DO NOTHING
 `,
-		opts.AccountID,
-		opts.TxHash,
-		opts.OutIdx,
-		opts.Value,
-		opts.Address,
-		opts.Coinbase,
-		opts.CovenantType,
-		SQLCovenantItems(opts.CovenantItems),
+		accountID,
+		prevout.Hash.String(),
+		prevout.Index,
+		value,
+		address,
+		uint8(covenant.Type),
+		SQLCovenantItems(covenant.Items),
+		coinbase,
+		nameHash,
+		coinType,
 	)
 	return errors.WithStack(err)
 }
 
-func GetCoinByOutpoint(tx Transactor, accountID, txHash string, outIdx int) (*Coin, error) {
+func GetCoinByPrevout(tx Transactor, accountID string, prevout *chain.Outpoint) (*Coin, error) {
 	row := tx.QueryRow(
 		coinQuery("WHERE coins.account_id = ? AND tx_hash = ? AND out_idx = ?"),
 		accountID,
-		txHash,
-		outIdx,
+		prevout.Hash.String(),
+		prevout.Index,
 	)
 	if row.Err() != nil {
 		return nil, errors.WithStack(row.Err())
@@ -117,11 +140,29 @@ func GetCoinByOutpoint(tx Transactor, accountID, txHash string, outIdx int) (*Co
 	return scanCoin(row)
 }
 
-func UpdateCoinSpent(tx Transactor, id int, txHash string) error {
+func HasCoinByPrevout(tx Transactor, accountID string, outpoint *chain.Outpoint) (bool, error) {
+	row := tx.QueryRow(
+		"SELECT EXISTS(SELECT 1 FROM coins WHERE coins.account_id = ? AND tx_hash = ? AND out_idx = ?)",
+		accountID,
+		outpoint.Hash.String(),
+		outpoint.Index,
+	)
+	var out bool
+	if err := row.Err(); err != nil {
+		return out, errors.WithStack(row.Err())
+	}
+	if err := row.Scan(&out); err != nil {
+		return out, errors.WithStack(err)
+	}
+	return out, nil
+}
+
+func UpdateCoinSpent(tx Transactor, outpoint *chain.Outpoint, spendHash gcrypto.Hash) error {
 	_, err := tx.Exec(
-		"UPDATE coins SET spending_tx_hash = ? WHERE id = ?",
-		txHash,
-		id,
+		"UPDATE coins SET spending_tx_hash = ? WHERE tx_hash = ? AND out_idx = ?",
+		spendHash,
+		outpoint.Hash.String(),
+		outpoint.Index,
 	)
 	return errors.WithStack(err)
 }
@@ -129,17 +170,20 @@ func UpdateCoinSpent(tx Transactor, id int, txHash string) error {
 func GetFundingCoins(tx Transactor, accountID string, network *chain.Network, height int) ([]*Coin, error) {
 	rows, err := tx.Query(
 		coinQuery(`
-WHERE spending_block_height IS NULL 
+WHERE coins.spending_tx_hash IS NULL
 AND (
 	(txin.block_height <= ? AND coins.coinbase = TRUE) OR
 	(coins.coinbase = FALSE)
 )
-AND covenant_type = 'NONE' 
-AND coins.account_id = ? 
+AND coins.covenant_type = ? 
+AND coins.account_id = ?
+AND coins.type = ?
 ORDER BY value ASC
 `),
 		height-network.CoinbaseMaturity,
+		uint8(chain.CovenantNone),
 		accountID,
+		uint8(CoinTypeDefault),
 	)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -176,64 +220,116 @@ func GetUnspentCoins(q Querier, accountID string) ([]*Coin, error) {
 	return coins, errors.WithStack(err)
 }
 
-func scanCoin(s Scanner) (*Coin, error) {
+func GetFinalizableDutchAuctionFillCoin(q Querier, accountID, name string) (*Coin, error) {
+	row := q.QueryRow(
+		coinQuery(`
+WHERE coins.spending_tx_hash IS NULL
+AND coins.account_id = ?
+AND coins.type = ?
+AND coins.covenant_type = ?
+AND coins.name_hash = ?
+`),
+		accountID,
+		uint8(CoinTypeDutchAuctionFill),
+		uint8(chain.CovenantTransfer),
+		chain.HashName(name),
+	)
+	if row.Err() != nil {
+		return nil, errors.WithStack(row.Err())
+	}
+	return scanCoin(row)
+}
+
+func GetTransferrableDutchAuctionCancelCoin(q Querier, accountID, name string) (*Coin, error) {
+	row := q.QueryRow(
+		coinQuery(`
+WHERE coins.spending_tx_hash IS NULL
+AND coins.account_id = ?
+AND coins.type = ?
+AND coins.covenant_type = ?
+AND coins.name_hash = ?
+`),
+		accountID,
+		uint8(CoinTypeDutchAuctionListing),
+		uint8(chain.CovenantFinalize),
+		chain.HashName(name),
+	)
+	if row.Err() != nil {
+		return nil, errors.WithStack(row.Err())
+	}
+	return scanCoin(row)
+}
+
+func GetFinalizableDutchAuctionCancelCoin(q Querier, accountID, name string) (*Coin, error) {
+	row := q.QueryRow(
+		coinQuery(`
+WHERE coins.spending_tx_hash IS NULL
+AND coins.account_id = ?
+AND coins.type = ?
+AND coins.covenant_type = ?
+AND coins.name_hash = ?
+`),
+		accountID,
+		uint8(CoinTypeDutchAuctionCancel),
+		uint8(chain.CovenantTransfer),
+		chain.HashName(name),
+	)
+	if row.Err() != nil {
+		return nil, errors.WithStack(row.Err())
+	}
+	return scanCoin(row)
+}
+
+func scanCoin(s Scanner, addlFields ...interface{}) (*Coin, error) {
 	coin := new(Coin)
+	coin.Prevout = new(chain.Outpoint)
+	var covType uint8
 	var covItems SQLCovenantItems
-	var spendingBlockHeight sql.NullInt32
-	var spendingBlockHash sql.NullString
-	var spendingTxIdx sql.NullInt32
-	var spendingTxHash sql.NullString
-	err := s.Scan(
-		&coin.ID,
+	var branch uint32
+	var index uint32
+	err := s.Scan(append([]interface{}{
 		&coin.AccountID,
-		&coin.BlockHeight,
-		&coin.BlockHash,
-		&coin.TxIdx,
-		&coin.TxHash,
-		&coin.OutIdx,
+		&coin.Spent,
+		&coin.NameHash,
+		&coin.Type,
+		&coin.Height,
 		&coin.Value,
 		&coin.Address,
-		&coin.AddressBranch,
-		&coin.AddressIndex,
-		&coin.Coinbase,
-		&coin.CovenantType,
+		&covType,
 		&covItems,
-		&spendingBlockHeight,
-		&spendingBlockHash,
-		&spendingTxIdx,
-		&spendingTxHash,
-	)
+		&coin.Prevout.Hash,
+		&coin.Prevout.Index,
+		&coin.Coinbase,
+		&branch,
+		&index,
+	}, addlFields...)...)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	coin.CovenantItems = covItems
-	coin.SpendingBlockHeight = int(spendingBlockHeight.Int32)
-	coin.SpendingBlockHash = spendingBlockHash.String
-	coin.SpendingTxIdx = int(spendingTxIdx.Int32)
-	coin.SpendingTxHash = spendingTxHash.String
+	coin.Covenant = &chain.Covenant{
+		Type:  chain.CovenantType(covType),
+		Items: covItems,
+	}
+	coin.Derivation = chain.Derivation{branch, index}
 	return coin, nil
 }
 
 const baseCoinQuery = `
 SELECT 
-	coins.id AS id,
 	coins.account_id AS account_id,
-	txin.block_height AS block_height,
-	txin.block_hash AS block_hash, 
-	txin.idx AS tx_idx, 
-	coins.tx_hash AS tx_hash, 
-	coins.out_idx AS out_idx, 
-	coins.value AS value,
+	txout.block_hash IS NOT NULL as spent,
+	coins.name_hash AS name_hash,
+	coins.type AS type,
+	txin.block_height AS height,
+	coins.value as VALUE,
 	coins.address AS address,
-	addr.branch AS address_branch,
-	addr.idx AS address_index, 
-	coins.coinbase AS coinbase,
 	coins.covenant_type AS covenant_type,
 	coins.covenant_items AS covenant_items,
-	txout.block_height AS spending_block_height,
-	txout.block_hash AS spending_block_hash,
-	txout.idx AS spending_tx_idx,
-	coins.spending_tx_hash AS spending_tx_hash
+	coins.tx_hash AS tx_hash, 
+	coins.out_idx AS out_idx,
+	coins.coinbase AS coinbase,
+	addr.branch AS address_branch,
+	addr.idx AS address_index
 FROM coins
 INNER JOIN addresses AS addr ON addr.address = coins.address
 INNER JOIN transactions AS txin ON txin.account_id = coins.account_id AND txin.hash = coins.tx_hash

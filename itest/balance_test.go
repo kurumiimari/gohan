@@ -20,8 +20,8 @@ func (s *AccountBalanceSuite) SetupTest() {
 	s.hsd = startHSD()
 	s.client, s.cleanup = startDaemon(t)
 
-	_, err := s.client.CreateWallet(&api.CreateWalletReq{
-		Name:     "alice",
+	_, err := s.client.CreateAccount(&api.CreateAccountReq{
+		ID:       "alice",
 		Password: "password",
 	})
 	require.NoError(t, err)
@@ -34,11 +34,11 @@ func (s *AccountBalanceSuite) TearDownTest() {
 
 func (s *AccountBalanceSuite) TestImmatureCoinbaseBalance() {
 	t := s.T()
-	info, err := s.client.GetAccount("alice", "default")
+	info, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
 	mineTo(t, s.hsd.Client, s.client, 1, info.ReceiveAddress)
-	awaitHeight(t, s.client, "alice", "default", 1)
-	info, err = s.client.GetAccount("alice", "default")
+	awaitHeight(t, s.client, "alice", 1)
+	info, err = s.client.GetAccount("alice")
 	require.NoError(t, err)
 	require.EqualValues(t, 0, info.Balances.Available)
 	require.EqualValues(t, 2000000000, info.Balances.Immature)
@@ -48,14 +48,14 @@ func (s *AccountBalanceSuite) TestImmatureCoinbaseBalance() {
 
 func (s *AccountBalanceSuite) TestMatureCoinbaseBalance() {
 	t := s.T()
-	info, err := s.client.GetAccount("alice", "default")
+	info, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
 	mineTo(t, s.hsd.Client, s.client, 1, info.ReceiveAddress)
-	awaitHeight(t, s.client, "alice", "default", 1)
+	awaitHeight(t, s.client, "alice", 1)
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.CoinbaseMaturity, ZeroRegtestAddr)
 	mineTo(t, s.hsd.Client, s.client, 1, info.ReceiveAddress)
-	awaitHeight(t, s.client, "alice", "default", chain.NetworkRegtest.CoinbaseMaturity + 2)
-	info, err = s.client.GetAccount("alice", "default")
+	awaitHeight(t, s.client, "alice", chain.NetworkRegtest.CoinbaseMaturity+2)
+	info, err = s.client.GetAccount("alice")
 	require.NoError(t, err)
 	require.EqualValues(t, 2000000000, info.Balances.Available)
 	require.EqualValues(t, 2000000000, info.Balances.Immature)

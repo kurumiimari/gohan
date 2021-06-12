@@ -1,22 +1,21 @@
 package chain
 
 import (
-	"bytes"
-	"encoding/hex"
-	"encoding/json"
+	"fmt"
 	"github.com/kurumiimari/gohan/bio"
+	"github.com/kurumiimari/gohan/gcrypto"
 	"github.com/pkg/errors"
 	"io"
 )
 
 type Outpoint struct {
-	Hash  []byte
-	Index uint32
+	Hash  gcrypto.Hash `json:"hash"`
+	Index uint32       `json:"index"`
 }
 
 func (o *Outpoint) WriteTo(w io.Writer) (int64, error) {
 	g := bio.NewGuardWriter(w)
-	bio.WriteFixedBytes(g, o.Hash, 32)
+	o.Hash.WriteTo(g)
 	bio.WriteUint32LE(g, o.Index)
 	return g.N, errors.Wrap(g.Err, "error writing outpoint")
 }
@@ -33,36 +32,11 @@ func (o *Outpoint) ReadFrom(r io.Reader) (int64, error) {
 	return g.N, nil
 }
 
-func (o *Outpoint) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Hash  string `json:"hash"`
-		Index uint32 `json:"index"`
-	}{
-		Hash:  hex.EncodeToString(o.Hash),
-		Index: o.Index,
-	})
-}
-
-func (o *Outpoint) UnmarshalJSON(bytes []byte) error {
-	tmp := struct {
-		Hash  string `json:"hash"`
-		Index uint32 `json:"index"`
-	}{}
-
-	if err := json.Unmarshal(bytes, &tmp); err != nil {
-		return err
-	}
-
-	hash, err := hex.DecodeString(tmp.Hash)
-	if err != nil {
-		return err
-	}
-	o.Hash = hash
-	o.Index = tmp.Index
-	return nil
-}
-
 func (o *Outpoint) Equal(other *Outpoint) bool {
-	return bytes.Equal(o.Hash, other.Hash) &&
+	return o.Hash.Equal(other.Hash) &&
 		o.Index == other.Index
+}
+
+func (o *Outpoint) String() string {
+	return fmt.Sprintf("%s/%d", o.Hash, o.Index)
 }

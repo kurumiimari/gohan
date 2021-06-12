@@ -1,0 +1,23 @@
+SHAKEDEX_PROOF:1.0.0
+{
+  "name": "xsqtx",
+  "lockingTxHash": "170b2408bc42e237e3d50f05939600afacf266eee1ec17dc25c9deb3fa935221",
+  "lockingOutputIdx": 0,
+  "publicKey": "02d02c2a2b249bb65566e22729c8a53419b3b37db197edd1f190af026dc0ee62e6",
+  "paymentAddr": "rs1qzwwd2j796ehww2csdj6ewy9u2vh0uxycxlpqyc",
+  "feeAddr": "rs1qw9q4z7dalr46ntunfg0yr4kryj9ms5yeuy26v0",
+  "data": [
+    {
+      "price": 1000,
+      "lockTime": 50,
+      "fee": 10,
+      "signature": "2d2cfd308dbab2a47d7b63bb0e5ba0f7e01a772165b199bbd56155f2df1b268527a03f033095b580e39387c5ff8cba860210d26ed91eeb881947231c193b8d3684"
+    },
+    {
+      "price": 100,
+      "lockTime": 100,
+      "fee": 20,
+      "signature": "d2b5a9067d0d5b88e490d85ef321ab0b569f7d3d9a242a1e65d50f95540c7ee759a1f66aeedda12c9d587ae7a3d6177deb94e4544e83ae6a293b6cb7e84d382284"
+    }
+  ]
+}

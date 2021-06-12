@@ -20,8 +20,8 @@ func (s *AccountSendSuite) SetupTest() {
 	s.hsd = startHSD()
 	s.client, s.cleanup = startDaemon(t)
 
-	_, err := s.client.CreateWallet(&api.CreateWalletReq{
-		Name:     "alice",
+	_, err := s.client.CreateAccount(&api.CreateAccountReq{
+		ID:       "alice",
 		Password: "password",
 	})
 	require.NoError(t, err)
@@ -35,14 +35,14 @@ func (s *AccountSendSuite) TearDownTest() {
 func (s *AccountSendSuite) TestSendWalletLocked() {
 	t := s.T()
 
-	info, err := s.client.GetAccount("alice", "default")
+	info, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
 
 	mineTo(t, s.hsd.Client, s.client, 1, info.ReceiveAddress)
-	awaitHeight(t, s.client, "alice", "default", 1)
-	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.CoinbaseMaturity + 1, ZeroRegtestAddr)
+	awaitHeight(t, s.client, "alice", 1)
+	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.CoinbaseMaturity+1, ZeroRegtestAddr)
 
-	_, err = s.client.Send("alice", "default", 10000, 10000, ZeroRegtestAddr, false)
+	_, err = s.client.Send("alice", 10000, 10000, ZeroRegtestAddr, false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "locked")
 }
@@ -50,18 +50,18 @@ func (s *AccountSendSuite) TestSendWalletLocked() {
 func (s *AccountSendSuite) TestSendInsufficientFunds() {
 	t := s.T()
 
-	info, err := s.client.GetAccount("alice", "default")
+	info, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
 
 	err = s.client.Unlock("alice", "password")
 	require.NoError(t, err)
 
-	_, err = s.client.Send("alice", "default", 10000, 10000, ZeroRegtestAddr, false)
+	_, err = s.client.Send("alice", 10000, 10000, ZeroRegtestAddr, false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "insufficient funds")
 	mineTo(t, s.hsd.Client, s.client, 1, info.ReceiveAddress)
-	awaitHeight(t, s.client, "alice", "default", 1)
-	_, err = s.client.Send("alice", "default", 10000, 10000, ZeroRegtestAddr, false)
+	awaitHeight(t, s.client, "alice", 1)
+	_, err = s.client.Send("alice", 10000, 10000, ZeroRegtestAddr, false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "insufficient funds")
 }
@@ -69,7 +69,7 @@ func (s *AccountSendSuite) TestSendInsufficientFunds() {
 func (s *AccountSendSuite) TestSendBalanceDecreases() {
 	t := s.T()
 
-	info, err := s.client.GetAccount("alice", "default")
+	info, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
 
 	err = s.client.Unlock("alice", "password")
@@ -77,18 +77,18 @@ func (s *AccountSendSuite) TestSendBalanceDecreases() {
 
 	mineTo(t, s.hsd.Client, s.client, 1, info.ReceiveAddress)
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.CoinbaseMaturity, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 3)
-	_, err = s.client.Send("alice", "default", 1000000, 100, ZeroRegtestAddr, false)
+	awaitHeight(t, s.client, "alice", 3)
+	_, err = s.client.Send("alice", 1000000, 100, ZeroRegtestAddr, false)
 	require.NoError(t, err)
 
-	info, err = s.client.GetAccount("alice", "default")
+	info, err = s.client.GetAccount("alice")
 	require.NoError(t, err)
 	require.EqualValues(t, 1998982000, info.Balances.Available)
 
 	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.CoinbaseMaturity, ZeroRegtestAddr)
-	awaitHeight(t, s.client, "alice", "default", 3)
+	awaitHeight(t, s.client, "alice", 3)
 
-	info, err = s.client.GetAccount("alice", "default")
+	info, err = s.client.GetAccount("alice")
 	require.NoError(t, err)
 	require.EqualValues(t, 1998982000, info.Balances.Available)
 }

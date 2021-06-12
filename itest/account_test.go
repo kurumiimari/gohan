@@ -27,8 +27,8 @@ func (s *AccountSuite) SetupTest() {
 	t := s.T()
 	s.client, s.cleanup = startDaemon(t)
 
-	_, err := s.client.CreateWallet(&api.CreateWalletReq{
-		Name:     "alice",
+	_, err := s.client.CreateAccount(&api.CreateAccountReq{
+		ID:       "alice",
 		Mnemonic: Mnemonic,
 		Password: "password",
 	})
@@ -41,19 +41,18 @@ func (s *AccountSuite) TearDownTest() {
 
 func (s *AccountSuite) TestGetAccounts() {
 	t := s.T()
-	accounts, err := s.client.GetAccounts("alice")
+	accounts, err := s.client.GetAccounts()
 	require.NoError(t, err)
-	require.EqualValues(t, []string{"default"}, accounts.Accounts)
+	require.EqualValues(t, []string{"alice"}, accounts.Accounts)
 }
 
 func (s *AccountSuite) TestGetAccountInfo() {
 	t := s.T()
-	info, err := s.client.GetAccount("alice", "default")
+	info, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
 	require.Equal(t, &api.AccountGetRes{
-		Name:             "default",
-		Index:            0,
-		WalletName:       "alice",
+		ID:         "alice",
+		Index:      0,
 		Balances: &walletdb.Balances{
 			Available:    0,
 			Immature:     0,
@@ -77,13 +76,13 @@ func (s *AccountSuite) TestGetAccountInfo() {
 func (s *AccountSuite) TestGenerateReceiveAddress() {
 	t := s.T()
 
-	addr, err := s.client.GenerateAccountReceiveAddress("alice", "default")
+	addr, err := s.client.GenerateAccountReceiveAddress("alice")
 	require.NoError(t, err)
 	require.Equal(t, &api.GenAddressRes{
 		Address:    "rs1qztdtxtrcdvkyxsk5r8fhyymh0mw6ju338pe9wg",
 		Derivation: "m/0/1",
 	}, addr)
-	info, err := s.client.GetAccount("alice", "default")
+	info, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
 	require.EqualValues(t, 11, info.LookaheadDepth.Receive)
 	require.EqualValues(t, 2, info.AddressDepth.Receive)
@@ -93,13 +92,13 @@ func (s *AccountSuite) TestGenerateReceiveAddress() {
 func (s *AccountSuite) TestGenerateChangeAddress() {
 	t := s.T()
 
-	addr, err := s.client.GenerateAccountChangeAddress("alice", "default")
+	addr, err := s.client.GenerateAccountChangeAddress("alice")
 	require.NoError(t, err)
 	require.Equal(t, &api.GenAddressRes{
 		Address:    "rs1qn8s8ua95pve9f86pu8e9ksf2elxrv4cdvp0qdq",
 		Derivation: "m/1/1",
 	}, addr)
-	info, err := s.client.GetAccount("alice", "default")
+	info, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
 	require.EqualValues(t, 11, info.LookaheadDepth.Change)
 	require.EqualValues(t, 2, info.AddressDepth.Change)

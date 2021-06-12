@@ -3,14 +3,14 @@ package cmd
 import "github.com/spf13/cobra"
 
 var walletsCmd = &cobra.Command{
-	Use:   "wallets",
-	Short: "Lists all wallets",
+	Use:   "accounts",
+	Short: "Lists all accounts",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := apiClient()
 		if err != nil {
 			return err
 		}
-		wallets, err := client.Wallets()
+		wallets, err := client.GetAccounts()
 		if err != nil {
 			return err
 		}
@@ -18,23 +18,6 @@ var walletsCmd = &cobra.Command{
 	},
 }
 
-var walletAccountsCmd = &cobra.Command{
-	Use:   "accounts",
-	Short: "Lists a wallet's accounts",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := apiClient()
-		if err != nil {
-			return err
-		}
-		accounts, err := client.GetAccounts(walletID)
-		if err != nil {
-			return err
-		}
-		return printJSON(accounts)
-	},
-}
-
 func init() {
 	rootCmd.AddCommand(walletsCmd)
-	rootCmd.AddCommand(walletAccountsCmd)
 }

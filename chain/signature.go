@@ -3,22 +3,33 @@ package chain
 import (
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/pkg/errors"
-	"github.com/tyler-smith/go-bip32"
+	"math/big"
 )
 
-type DerivationSigner interface {
-	Sign(deriv Derivation, b []byte) ([]byte, *bip32.Key, error)
+func SerializeSignature(sig *btcec.Signature) []byte {
+	// handle low 'S' malleability
+	// see btcec
+	sigS := sig.S
+	curve := btcec.S256()
+	if sigS.Cmp(new(big.Int).Rsh(curve.N, 1)) == 1 {
+		sigS = new(big.Int).Sub(curve.N, sigS)
+	}
+
+	rb := sig.R.Bytes()
+	sb := sigS.Bytes()
+	b := make([]byte, 64)
+	copy(b[32-len(rb):], rb)
+	copy(b[64-len(sb):], sb)
+	return b
 }
 
-func SignWithBip32Key(key *bip32.Key, b []byte) ([]byte, error) {
-	if !key.IsPrivate {
-		return nil, errors.New("cannot sign with a public key")
+func DeserializeSignature(b []byte) (*btcec.Signature, error) {
+	if len(b) != 64 {
+		return nil, errors.New("mal-formed signature")
 	}
-	pk, _ := btcec.PrivKeyFromBytes(btcec.S256(), key.Key[:32])
-	sig, err := pk.Sign(b)
-	if err != nil {
-		return nil, err
-	}
-	return SerializeRawSignature(sig), nil
-}
 
+	sig := new(btcec.Signature)
+	sig.R = new(big.Int).SetBytes(b[:32])
+	sig.S = new(big.Int).SetBytes(b[32:])
+	return sig, nil
+}

@@ -115,6 +115,16 @@ func (n *Network) ChainParams() *chaincfg.Params {
 	return n.chainParams
 }
 
+var currNetwork *Network = NetworkMain
+
+func SetCurrNetwork(network *Network) {
+	currNetwork = network
+}
+
+func GetCurrNetwork() *Network {
+	return currNetwork
+}
+
 func init() {
 	chaincfg.Register(NetworkMain.ChainParams())
 	chaincfg.Register(NetworkRegtest.ChainParams())

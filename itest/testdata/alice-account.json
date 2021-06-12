@@ -1,7 +1,6 @@
 {
-  "name": "default",
+  "id": "alice",
   "index": 0,
-  "wallet_name": "alice",
   "balances": {
     "available": 18849900180,
     "immature": 0,
@@ -14,8 +13,8 @@
     "change": 21
   },
   "lookahead_depth": {
-    "receive": 18,
-    "change": 30
+    "receive": 17,
+    "change": 29
   },
   "receive_address": "rs1qt8x08e9ypthpv5t9uz6wsg03zue4zr9ycxqd4j",
   "change_address": "rs1q57nczcxlfk30p2rm2ywuafzem9u0x40tr5acy2",

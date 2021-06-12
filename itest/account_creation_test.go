@@ -7,76 +7,76 @@ import (
 	"testing"
 )
 
-type WalletSuite struct {
+type AccountCreationSuite struct {
 	suite.Suite
 	hsd *HSD
 }
 
-func (s *WalletSuite) SetupSuite() {
+func (s *AccountCreationSuite) SetupSuite() {
 	s.hsd = startHSD()
 }
 
-func (s *WalletSuite) TearDownSuite() {
+func (s *AccountCreationSuite) TearDownSuite() {
 	s.hsd.Stop()
 }
 
-func (s *WalletSuite) TestCreateWallet_ImportMnemonic() {
+func (s *AccountCreationSuite) TestImportMnemonic() {
 	t := s.T()
 	client, cleanup := startDaemon(t)
 	defer cleanup()
 
-	res, err := client.CreateWallet(&api.CreateWalletReq{
-		Name:     "testwallet",
+	res, err := client.CreateAccount(&api.CreateAccountReq{
+		ID:       "testwallet",
 		Mnemonic: Mnemonic,
 		Password: "password",
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, &api.CreateWalletRes{
-		Name:      "testwallet",
+	require.EqualValues(t, &api.CreateAccountRes{
+		ID:        "testwallet",
 		Mnemonic:  nil,
 		WatchOnly: false,
 	}, res)
 }
 
-func (s *WalletSuite) TestCreateWallet_New() {
+func (s *AccountCreationSuite) TestBrandNew() {
 	t := s.T()
 	client, cleanup := startDaemon(t)
 	defer cleanup()
 
-	res, err := client.CreateWallet(&api.CreateWalletReq{
-		Name:     "testwallet",
+	res, err := client.CreateAccount(&api.CreateAccountReq{
+		ID:       "testwallet",
 		Password: "password",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "testwallet", res.Name)
+	require.Equal(t, "testwallet", res.ID)
 	require.NotNil(t, res.Mnemonic)
 	require.False(t, res.WatchOnly)
 }
 
-func (s *WalletSuite) TestCreateWallet_WatchOnly() {
+func (s *AccountCreationSuite) TestWatchOnly() {
 	t := s.T()
 	client, cleanup := startDaemon(t)
 	defer cleanup()
 
-	res, err := client.CreateWallet(&api.CreateWalletReq{
-		Name: "testwallet",
+	res, err := client.CreateAccount(&api.CreateAccountReq{
+		ID:   "testwallet",
 		XPub: "xpub6CMpnZHN1Zaqx2ctpHmqamD8NwEoEWpWia2pfojKZMmj5JfqKa1GNz4CZfZHr3LosxjFy98wV39XRX1BdkXxLwzyEYwyJ9eCFwyNtA5gniA",
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, &api.CreateWalletRes{
-		Name:      "testwallet",
+	require.EqualValues(t, &api.CreateAccountRes{
+		ID:        "testwallet",
 		Mnemonic:  nil,
 		WatchOnly: true,
 	}, res)
 }
 
-func (s *WalletSuite) TestUnlockWallet() {
+func (s *AccountCreationSuite) TestUnlock() {
 	t := s.T()
 	client, cleanup := startDaemon(t)
 	defer cleanup()
 
-	_, err := client.CreateWallet(&api.CreateWalletReq{
-		Name:     "testwallet",
+	_, err := client.CreateAccount(&api.CreateAccountReq{
+		ID:       "testwallet",
 		Password: "password",
 	})
 	require.NoError(t, err)
@@ -86,5 +86,5 @@ func (s *WalletSuite) TestUnlockWallet() {
 }
 
 func TestWalletSuite(t *testing.T) {
-	suite.Run(t, new(WalletSuite))
+	suite.Run(t, new(AccountCreationSuite))
 }

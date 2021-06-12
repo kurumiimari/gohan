@@ -14,22 +14,30 @@ const (
 	NameStatusUnowned      NameState = "UNOWNED"
 	NameStatusTransferring NameState = "TRANSFERRING"
 	NameStatusTransferred  NameState = "TRANSFERRED"
+	NameStatusAuctioning   NameState = "AUCTIONING"
 	NameStatusRevoked      NameState = "REVOKED"
 )
 
 type NameHistoryType string
 
 const (
-	NameActionOpen        NameHistoryType = "OPEN"
-	NameActionBid         NameHistoryType = "BID"
-	NameActionReveal      NameHistoryType = "REVEAL"
-	NameActionRedeem      NameHistoryType = "REDEEM"
-	NameActionUpdate      NameHistoryType = "UPDATE"
-	NameActionRegister    NameHistoryType = "REGISTER"
-	NameActionTransfer    NameHistoryType = "TRANSFER"
-	NameActionRevoke      NameHistoryType = "REVOKE"
-	NameActionFinalizeOut NameHistoryType = "FINALIZE_OUT"
-	NameActionFinalizeIn  NameHistoryType = "FINALIZE_IN"
+	NameActionOpen                        NameHistoryType = "OPEN"
+	NameActionBid                         NameHistoryType = "BID"
+	NameActionReveal                      NameHistoryType = "REVEAL"
+	NameActionRedeem                      NameHistoryType = "REDEEM"
+	NameActionUpdate                      NameHistoryType = "UPDATE"
+	NameActionRegister                    NameHistoryType = "REGISTER"
+	NameActionTransfer                    NameHistoryType = "TRANSFER"
+	NameActionTransferDutchAuctionListing NameHistoryType = "TRANSFER_DUTCH_AUCTION_LISTING"
+	NameActionFinalizeDutchAuctionListing NameHistoryType = "FINALIZE_DUTCH_AUCTION_LISTING"
+	NameActionTransferDutchAuctionCancel  NameHistoryType = "TRANSFER_DUTCH_AUCTION_CANCEL"
+	NameActionFinalizeDutchAuctionCancel  NameHistoryType = "FINALIZE_DUTCH_AUCTION_CANCEL"
+	NameActionFillDutchAuction            NameHistoryType = "FILL_DUTCH_AUCTION"
+	NameActionTransferFillDutchAuction    NameHistoryType = "TRANSFER_DUTCH_AUCTION_FILL"
+	NameActionFinalizeFillDutchAuction    NameHistoryType = "FINALIZE_DUTCH_AUCTION_FILL"
+	NameActionRevoke                      NameHistoryType = "REVOKE"
+	NameActionFinalizeOut                 NameHistoryType = "FINALIZE_OUT"
+	NameActionFinalizeIn                  NameHistoryType = "FINALIZE_IN"
 )
 
 type NameHistory struct {
@@ -37,8 +45,7 @@ type NameHistory struct {
 	Name         string
 	NameHash     []byte
 	Type         NameHistoryType
-	TxHash       string
-	OutIdx       int
+	Outpoint     *chain.Outpoint
 	Value        uint64
 	BidValue     uint64
 	ParentTxHash string
@@ -53,9 +60,8 @@ type Name struct {
 }
 
 type RevealableBid struct {
-	TxHash   string
-	OutIdx   int
-	BidValue uint64
+	Coin  *Coin
+	Value uint64
 }
 
 type RedeemableReveal struct {
@@ -188,7 +194,7 @@ func UpdateNameHistory(tx Transactor, entry *NameHistory) error {
 		parentOutIdx = &entry.ParentOutIdx
 	}
 
-	if entry.NameHash != nil {
+	if entry.NameHash != nil && entry.Name == "" {
 		name, err := GetNameFromHash(tx, entry.AccountID, entry.NameHash)
 		if err != nil {
 			return errors.Wrap(err, "error resolving name hash")
@@ -213,31 +219,134 @@ ON CONFLICT (account_id, tx_hash, out_idx) DO NOTHING
 		entry.AccountID,
 		entry.Name,
 		string(entry.Type),
-		entry.TxHash,
-		entry.OutIdx,
+		entry.Outpoint.Hash.String(),
+		entry.Outpoint.Index,
 		entry.Value,
 		bidValue,
 		parentTxHash,
 		parentOutIdx,
 	)
-	return errors.Wrap(err, "error saving name history")
+	return errors.WithStack(err)
+}
+
+func GetOwnedNameCoin(q Transactor, accountID string, name string) (*Coin, error) {
+	row := q.QueryRow(
+		coinQuery(`
+WHERE coins.account_id = ?
+AND coins.name_hash = ?
+AND coins.covenant_type IN (?, ?, ?, ?)
+AND coins.spending_tx_hash IS NULL
+AND coins.type = ?
+`),
+		accountID,
+		chain.HashName(name),
+		uint8(chain.CovenantRegister),
+		uint8(chain.CovenantUpdate),
+		uint8(chain.CovenantRenew),
+		uint8(chain.CovenantFinalize),
+		CoinTypeDefault,
+	)
+	if row.Err() != nil {
+		return nil, errors.WithStack(row.Err())
+	}
+	return scanCoin(row)
+}
+
+func GetRevocableNameCoin(q Transactor, accountID string, name string) (*Coin, error) {
+	row := q.QueryRow(
+		coinQuery(`
+WHERE coins.account_id = ?
+AND coins.name_hash = ?
+AND coins.covenant_type IN (?, ?, ?, ?, ?)
+AND coins.spending_tx_hash IS NULL
+AND coins.type = ?
+`),
+		accountID,
+		chain.HashName(name),
+		uint8(chain.CovenantRegister),
+		uint8(chain.CovenantUpdate),
+		uint8(chain.CovenantRenew),
+		uint8(chain.CovenantTransfer),
+		uint8(chain.CovenantFinalize),
+		CoinTypeDefault,
+	)
+	if row.Err() != nil {
+		return nil, errors.WithStack(row.Err())
+	}
+	return scanCoin(row)
+}
+
+func GetTransferCoin(q Transactor, accountID string, name string) (*Coin, error) {
+	row := q.QueryRow(
+		coinQuery(`
+WHERE coins.account_id = ?
+AND coins.name_hash = ?
+AND coins.covenant_type = ?
+AND coins.spending_tx_hash IS NULL
+AND coins.type = ?
+`),
+		accountID,
+		chain.HashName(name),
+		uint8(chain.CovenantTransfer),
+		CoinTypeDefault,
+	)
+	if row.Err() != nil {
+		return nil, errors.WithStack(row.Err())
+	}
+	return scanCoin(row)
+}
+
+func GetDutchAuctionTransferCoin(q Transactor, accountID string, name string) (*Coin, error) {
+	row := q.QueryRow(
+		coinQuery(`
+WHERE coins.account_id = ?
+AND coins.name_hash = ?
+AND coins.covenant_type = ?
+AND coins.spending_tx_hash IS NULL
+AND coins.type = ?
+`),
+		accountID,
+		chain.HashName(name),
+		uint8(chain.CovenantTransfer),
+		uint8(CoinTypeDutchAuctionListing),
+	)
+	if row.Err() != nil {
+		return nil, errors.WithStack(row.Err())
+	}
+	return scanCoin(row)
 }
 
 func GetRevealableBids(q Transactor, accountID string, name string, network *chain.Network, revealHeight int) ([]*RevealableBid, error) {
 	rows, err := q.Query(`
-SELECT name_history.tx_hash, name_history.out_idx, name_history.bid_value FROM name_history
-JOIN transactions ON (transactions.hash = name_history.tx_hash AND transactions.account_id = name_history.account_id)
-LEFT OUTER JOIN name_history AS child 
-ON child.parent_tx_hash = name_history.tx_hash AND child.parent_out_idx = name_history.out_idx
-WHERE name_history.account_id = ? 
-AND name_history.name = ? 
-AND transactions.block_height > ?
-AND name_history.bid_value IS NOT NULL
-AND child.parent_tx_hash IS NULL
-AND name_history.type = 'BID'
+SELECT 
+	coins.account_id AS account_id,
+	txout.block_hash IS NOT NULL as spent,
+	coins.name_hash AS name_hash,
+	coins.type AS type,
+	txin.block_height AS height,
+	coins.value as VALUE,
+	coins.address AS address,
+	coins.covenant_type AS covenant_type,
+	coins.covenant_items AS covenant_items,
+	coins.tx_hash AS tx_hash, 
+	coins.out_idx AS out_idx,
+	coins.coinbase AS coinbase,
+	addr.branch AS address_branch,
+	addr.idx AS address_index,
+	hist.bid_value AS bid_value
+FROM coins
+INNER JOIN addresses AS addr ON addr.address = coins.address
+INNER JOIN transactions AS txin ON txin.account_id = coins.account_id AND txin.hash = coins.tx_hash
+INNER JOIN name_history AS hist ON hist.account_id = coins.account_id AND hist.tx_hash = coins.tx_hash AND hist.out_idx = coins.out_idx 
+LEFT JOIN transactions AS txout ON txout.account_id = coins.account_id AND txout.hash = coins.spending_tx_hash
+WHERE coins.account_id = ? 
+AND coins.name_hash = ?
+AND txin.block_height > ?
+AND hist.bid_value IS NOT NULL
+AND coins.spending_tx_hash IS NULL
 `,
 		accountID,
-		name,
+		chain.HashName(name),
 		revealHeight-network.BiddingPeriod,
 	)
 	if err != nil {
@@ -248,55 +357,46 @@ AND name_history.type = 'BID'
 	var bids []*RevealableBid
 	for rows.Next() {
 		bid := new(RevealableBid)
-		err := rows.Scan(
-			&bid.TxHash,
-			&bid.OutIdx,
-			&bid.BidValue,
-		)
+		coin, err := scanCoin(rows, &bid.Value)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
+		bid.Coin = coin
 		bids = append(bids, bid)
 	}
-	return bids, errors.WithStack(err)
+	return bids, errors.WithStack(rows.Err())
 }
 
-func GetRedeemableReveals(q Querier, accountID string, name string) ([]*RedeemableReveal, error) {
-	rows, err := q.Query(`
-SELECT name_history.tx_hash, name_history.out_idx FROM name_history
-JOIN transactions ON (transactions.hash = name_history.tx_hash AND transactions.account_id = name_history.account_id)
-JOIN coins ON (coins.tx_hash = name_history.tx_hash AND coins.out_idx = name_history.out_idx)
-LEFT OUTER JOIN name_history AS child ON (child.parent_tx_hash = name_history.tx_hash AND child.parent_out_idx = name_history.out_idx)
-WHERE name_history.account_id = ? 
-AND name_history.name = ?
+func GetRedeemableReveals(q Querier, accountID string, name string) ([]*Coin, error) {
+	rows, err := q.Query(
+		coinQuery(`
+WHERE coins.account_id = ?
+AND coins.name_hash = ?
+AND coins.covenant_type = ?
 AND coins.value > 0
-AND child.parent_tx_hash IS NULL
-AND name_history.type = 'REVEAL'
-`,
+AND coins.spending_tx_hash IS NULL
+`),
 		accountID,
-		name,
+		chain.HashName(name),
+		uint8(chain.CovenantReveal),
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "error querying redeemable reveals")
+		return nil, errors.WithStack(err)
 	}
 
 	defer rows.Close()
-	var revs []*RedeemableReveal
+	var coins []*Coin
 	for rows.Next() {
-		rev := new(RedeemableReveal)
-		err := rows.Scan(
-			&rev.TxHash,
-			&rev.OutIdx,
-		)
+		coin, err := scanCoin(rows)
 		if err != nil {
-			return nil, errors.Wrap(err, "error scanning redeemable reveals")
+			return nil, err
 		}
-		revs = append(revs, rev)
+		coins = append(coins, coin)
 	}
-	return revs, errors.Wrap(rows.Err(), "error iterating redeemable reveals")
+	return coins, errors.WithStack(rows.Err())
 }
 
-func GetNameHistory(q Querier, network *chain.Network, accountID, name string, count, offset int) ([]*RichNameHistoryEntry, error) {
+func GetNameHistory(q Querier, accountID, name string, count, offset int) ([]*RichNameHistoryEntry, error) {
 	rows, err := q.Query(`
 SELECT 
 	name_history.name,
@@ -360,7 +460,7 @@ LIMIT ? OFFSET ?
 			entry.ParentOutIdx = &v
 		}
 		entry.Transaction.Hex = hex.EncodeToString(rawTx)
-		if err := fillRichTransaction(q, accountID, network, entry.Transaction, rawTx); err != nil {
+		if err := fillRichTransaction(q, accountID, entry.Transaction, rawTx); err != nil {
 			return nil, errors.Wrap(err, "error filling rich transaction in name history")
 		}
 		entries = append(entries, entry)

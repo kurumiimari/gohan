@@ -6,7 +6,7 @@ func NewDataOpcode(dLen int) Opcode {
 	if dLen == 0 || dLen >= len(dataOpcodes) {
 		panic("invalid data opcode")
 	}
-	return dataOpcodes[dLen - 1]
+	return dataOpcodes[dLen-1]
 }
 
 func (o Opcode) String() string {

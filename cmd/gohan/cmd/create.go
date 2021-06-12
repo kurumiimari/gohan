@@ -29,8 +29,8 @@ var createCmd = &cobra.Command{
 
 		fmt.Println("Creating wallet...")
 
-		res, err := client.CreateWallet(&api.CreateWalletReq{
-			Name:     walletID,
+		res, err := client.CreateAccount(&api.CreateAccountReq{
+			ID:       accountID,
 			Password: string(pwB),
 		})
 		if err != nil {

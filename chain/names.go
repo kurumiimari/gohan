@@ -4,7 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"github.com/kurumiimari/gohan/bio"
-	"golang.org/x/crypto/sha3"
+	"github.com/kurumiimari/gohan/gcrypto"
 	"io"
 )
 
@@ -89,10 +89,8 @@ func IsNameBlacklisted(name string) bool {
 	return ok
 }
 
-func HashName(name string) []byte {
-	h := sha3.New256()
-	h.Write([]byte(name))
-	return h.Sum(nil)
+func HashName(name string) gcrypto.Hash {
+	return gcrypto.SHA3256([]byte(name))
 }
 
 func HasRollout(network *Network, height int, name string) bool {
@@ -124,7 +122,7 @@ func NameHashRolloutInfo(network *Network, hash []byte) (int, int) {
 	p := 256 % 52
 	var week int
 	for i := 0; i < len(hash); i++ {
-		week = (p * week + int(hash[i])) % 52
+		week = (p*week + int(hash[i])) % 52
 	}
 
 	height := week * network.RolloutInterval

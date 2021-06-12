@@ -23,7 +23,7 @@ func GenerateNonce(ek ExtendedKey, name string, address *Address, value uint64) 
 	key := DeriveExtendedKey(ek, index).PublicKey()
 
 	h, _ := blake2b.New256(nil)
-	h.Write(address.Hash)
+	address.Hash.WriteTo(h)
 	h.Write(key.SerializeCompressed())
 	h.Write(HashName(name))
 

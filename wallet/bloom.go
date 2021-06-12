@@ -17,73 +17,6 @@ const (
 	OutpointBloomK = 23
 )
 
-type AddressBloom struct {
-	filter *bloom.BloomFilter
-}
-
-func NewAddrBloomFromAddrs(addresses []*chain.Address) *AddressBloom {
-	filter := bloom.New(AddrBloomM, AddrBloomK)
-	buf := new(bytes.Buffer)
-	for _, el := range addresses {
-		buf.Reset()
-		if _, err := el.WriteTo(buf); err != nil {
-			panic(err)
-		}
-		filter.Add(buf.Bytes())
-	}
-
-	return &AddressBloom{
-		filter: filter,
-	}
-}
-
-func AddressBloomFromBytes(buf []byte) (*AddressBloom, error) {
-	r := bytes.NewReader(buf)
-	filter := new(bloom.BloomFilter)
-	if _, err := filter.ReadFrom(r); err != nil {
-		return nil, errors.Wrap(err, "error unmarshaling bloom filter")
-	}
-	return &AddressBloom{
-		filter: filter,
-	}, nil
-}
-
-func MustAddressBloomFromBytes(buf []byte) *AddressBloom {
-	b, err := AddressBloomFromBytes(buf)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
-
-func (a *AddressBloom) Add(address *chain.Address) {
-	buf := new(bytes.Buffer)
-	if _, err := address.WriteTo(buf); err != nil {
-		panic(err)
-	}
-	a.filter.Add(buf.Bytes())
-}
-
-func (a *AddressBloom) Test(address *chain.Address) bool {
-	buf := new(bytes.Buffer)
-	if _, err := address.WriteTo(buf); err != nil {
-		panic(err)
-	}
-	return a.filter.Test(buf.Bytes())
-}
-
-func (a *AddressBloom) Bytes() []byte {
-	buf := new(bytes.Buffer)
-	if _, err := a.filter.WriteTo(buf); err != nil {
-		panic(err)
-	}
-	return buf.Bytes()
-}
-
-func (a *AddressBloom) Copy() *AddressBloom {
-	return &AddressBloom{filter: a.filter.Copy()}
-}
-
 type OutpointBloom struct {
 	filter *bloom.BloomFilter
 }
@@ -107,7 +40,7 @@ func NewOutpointBloomFromBytes(buf []byte) (*OutpointBloom, error) {
 	r := bytes.NewReader(buf)
 	filter := new(bloom.BloomFilter)
 	if _, err := filter.ReadFrom(r); err != nil {
-		return nil, errors.Wrap(err, "error unmarshaling bloom filter")
+		return nil, errors.WithStack(err)
 	}
 	return &OutpointBloom{
 		filter: filter,

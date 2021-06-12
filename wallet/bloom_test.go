@@ -16,48 +16,48 @@ const (
 //	fmt.Println(k)
 //}
 
-func TestAddrBloom(t *testing.T) {
-	ek, err := chain.NewMasterExtendedKeyFromXPub(xPub, chain.NetworkMain)
-	require.NoError(t, err)
-
-	pool := NewAddrBloomFromAddrs(nil)
-
-	for i := 0; i < 10; i++ {
-		key := ek.Child(uint32(i))
-		addr := chain.NewAddressFromPubkey(key.PublicKey())
-		pool.Add(addr)
-	}
-
-	for i := 0; i < 10; i++ {
-		key := ek.Child(uint32(i))
-		addr := chain.NewAddressFromPubkey(key.PublicKey())
-		require.True(t, pool.Test(addr))
-	}
-
-	key := ek.Child(99).PublicKey()
-	require.False(t, pool.Test(chain.NewAddressFromPubkey(key)))
-}
-
-func TestAddrBloom_Marshaling(t *testing.T) {
-	ek, err := chain.NewMasterExtendedKeyFromXPub(xPub, chain.NetworkMain)
-	require.NoError(t, err)
-
-	pool1 := NewAddrBloomFromAddrs(nil)
-	for i := 0; i < 10; i++ {
-		key := ek.Child(uint32(i))
-		addr := chain.NewAddressFromPubkey(key.PublicKey())
-		pool1.Add(addr)
-	}
-
-	pool2, err := AddressBloomFromBytes(pool1.Bytes())
-	require.NoError(t, err)
-
-	for i := 0; i < 10; i++ {
-		key := ek.Child(uint32(i))
-		addr := chain.NewAddressFromPubkey(key.PublicKey())
-		require.True(t, pool2.Test(addr))
-	}
-}
+//func TestAddrBloom(t *testing.T) {
+//	ek, err := chain.NewMasterExtendedKeyFromXPub(xPub, chain.NetworkMain)
+//	require.NoError(t, err)
+//
+//	pool := NewAddrBloomFromAddrs(nil)
+//
+//	for i := 0; i < 10; i++ {
+//		key := ek.Child(uint32(i))
+//		addr := chain.NewAddressFromPubkey(key.PublicKey())
+//		pool.Add(addr)
+//	}
+//
+//	for i := 0; i < 10; i++ {
+//		key := ek.Child(uint32(i))
+//		addr := chain.NewAddressFromPubkey(key.PublicKey())
+//		require.True(t, pool.Test(addr))
+//	}
+//
+//	key := ek.Child(99).PublicKey()
+//	require.False(t, pool.Test(chain.NewAddressFromPubkey(key)))
+//}
+//
+//func TestAddrBloom_Marshaling(t *testing.T) {
+//	ek, err := chain.NewMasterExtendedKeyFromXPub(xPub, chain.NetworkMain)
+//	require.NoError(t, err)
+//
+//	pool1 := NewAddrBloomFromAddrs(nil)
+//	for i := 0; i < 10; i++ {
+//		key := ek.Child(uint32(i))
+//		addr := chain.NewAddressFromPubkey(key.PublicKey())
+//		pool1.Add(addr)
+//	}
+//
+//	pool2, err := AddressBloomFromBytes(pool1.Bytes())
+//	require.NoError(t, err)
+//
+//	for i := 0; i < 10; i++ {
+//		key := ek.Child(uint32(i))
+//		addr := chain.NewAddressFromPubkey(key.PublicKey())
+//		require.True(t, pool2.Test(addr))
+//	}
+//}
 
 func TestOutpointBloom(t *testing.T) {
 	pool := NewOutpointBloomFromOutpoints(nil)

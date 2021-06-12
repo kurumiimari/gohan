@@ -2,6 +2,7 @@ package bio
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"io"
 )
 
@@ -105,4 +106,24 @@ func ReadUint16BE(r io.Reader) (uint16, error) {
 		return 0, err
 	}
 	return binary.BigEndian.Uint16(b), nil
+}
+
+func DecodeHexArray(in []string) ([][]byte, error) {
+	items := make([][]byte, len(in))
+	for i, item := range in {
+		b, err := hex.DecodeString(item)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = b
+	}
+	return items, nil
+}
+
+func MustDecodeHexArray(in []string) [][]byte {
+	out, err := DecodeHexArray(in)
+	if err != nil {
+		panic(err)
+	}
+	return out
 }

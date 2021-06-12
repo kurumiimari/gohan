@@ -1,14 +1,12 @@
 package api
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"github.com/kurumiimari/gohan/chain"
+	"github.com/kurumiimari/gohan/ghttp"
+	"github.com/kurumiimari/gohan/shakedex"
 	"github.com/kurumiimari/gohan/wallet"
 	"github.com/kurumiimari/gohan/walletdb"
-	"io/ioutil"
-	"net/http"
 	"net/url"
 	"strings"
 )
@@ -31,77 +29,71 @@ func (c *Client) Status() (*wallet.NodeStatus, error) {
 	return res, err
 }
 
-func (c *Client) Wallets() (*GetWalletsRes, error) {
-	res := new(GetWalletsRes)
-	err := c.doGet("api/v1/wallets", res)
-	return res, err
-}
-
 func (c *Client) PollBlock() error {
 	return c.doPost("api/v1/poll_block", nil, nil)
 }
 
-func (c *Client) CreateWallet(req *CreateWalletReq) (*CreateWalletRes, error) {
-	res := new(CreateWalletRes)
-	err := c.doPost("api/v1/wallets", req, res)
+func (c *Client) CreateAccount(req *CreateAccountReq) (*CreateAccountRes, error) {
+	res := new(CreateAccountRes)
+	err := c.doPost("api/v1/accounts", req, res)
 	return res, err
 }
 
-func (c *Client) Unlock(walletID string, password string) error {
-	return c.doPost(fmt.Sprintf("api/v1/wallets/%s/unlock", walletID), &UnlockReq{
+func (c *Client) Unlock(accountID string, password string) error {
+	return c.doPost(c.accountPath(accountID, "unlock"), &UnlockReq{
 		Password: password,
 	}, nil)
 }
 
-func (c *Client) Lock(walletID string) error {
-	return c.doPost(fmt.Sprintf("api/v1/wallets/%s/lock", walletID), nil, nil)
+func (c *Client) Lock(accountID string) error {
+	return c.doPost(c.accountPath(accountID, "lock"), nil, nil)
 }
 
-func (c *Client) GetAccounts(walletID string) (*GetWalletAccountsRes, error) {
-	res := new(GetWalletAccountsRes)
-	err := c.doGet(fmt.Sprintf("api/v1/wallets/%s/accounts", walletID), res)
+func (c *Client) GetAccounts() (*GetAccountsRes, error) {
+	res := new(GetAccountsRes)
+	err := c.doGet("api/v1/accounts", res)
 	return res, err
 }
 
-func (c *Client) GetAccount(walletID string, accountID string) (*AccountGetRes, error) {
+func (c *Client) GetAccount(accountID string) (*AccountGetRes, error) {
 	res := new(AccountGetRes)
-	err := c.doGet(fmt.Sprintf("api/v1/wallets/%s/accounts/%s", walletID, accountID), res)
+	err := c.doGet(c.accountPath(accountID), res)
 	return res, err
 }
 
-func (c *Client) GetNames(walletID string, accountID string) (*GetNamesRes, error) {
+func (c *Client) GetNames(accountID string) (*GetNamesRes, error) {
 	res := new(GetNamesRes)
-	err := c.doGet(c.walletPath(walletID, accountID, "names"), res)
+	err := c.doGet(c.accountPath(accountID, "names"), res)
 	return res, err
 }
 
-func (c *Client) GetName(walletID, accountID, name string) (*GetNameRes, error) {
+func (c *Client) GetName(accountID, name string) (*GetNameRes, error) {
 	res := new(GetNameRes)
-	err := c.doGet(c.walletPath(walletID, accountID, "names", name), res)
+	err := c.doGet(c.accountPath(accountID, "names", name), res)
 	return res, err
 }
 
-func (c *Client) GetAccountTransactions(walletID string, accountID string, count, offset int) ([]*walletdb.RichTransaction, error) {
+func (c *Client) GetAccountTransactions(accountID string, count, offset int) ([]*walletdb.RichTransaction, error) {
 	var res []*walletdb.RichTransaction
-	err := c.doGet(c.walletPath(walletID, accountID, fmt.Sprintf("transactions?count=%d&offset=%d", count, offset)), &res)
+	err := c.doGet(c.accountPath(accountID, fmt.Sprintf("transactions?count=%d&offset=%d", count, offset)), &res)
 	return res, err
 }
 
-func (c *Client) GenerateAccountReceiveAddress(walletID string, accountID string) (*GenAddressRes, error) {
+func (c *Client) GenerateAccountReceiveAddress(accountID string) (*GenAddressRes, error) {
 	res := new(GenAddressRes)
-	err := c.doPost(c.walletPath(walletID, accountID, "receive_address"), nil, res)
+	err := c.doPost(c.accountPath(accountID, "receive_address"), nil, res)
 	return res, err
 }
 
-func (c *Client) GenerateAccountChangeAddress(walletID string, accountID string) (*GenAddressRes, error) {
+func (c *Client) GenerateAccountChangeAddress(accountID string) (*GenAddressRes, error) {
 	res := new(GenAddressRes)
-	err := c.doPost(c.walletPath(walletID, accountID, "change_address"), nil, res)
+	err := c.doPost(c.accountPath(accountID, "change_address"), nil, res)
 	return res, err
 }
 
-func (c *Client) Send(walletID, accountID string, value, feeRate uint64, address string, createOnly bool) (*chain.Transaction, error) {
+func (c *Client) Send(accountID string, value, feeRate uint64, address string, createOnly bool) (*chain.Transaction, error) {
 	res := new(chain.Transaction)
-	err := c.doPost(c.walletPath(walletID, accountID, "sends"), &CreateSendReq{
+	err := c.doPost(c.accountPath(accountID, "sends"), &CreateSendReq{
 		Value:      value,
 		Address:    address,
 		FeeRate:    feeRate,
@@ -110,9 +102,9 @@ func (c *Client) Send(walletID, accountID string, value, feeRate uint64, address
 	return res, err
 }
 
-func (c *Client) Open(walletID, accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
+func (c *Client) Open(accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
 	res := new(chain.Transaction)
-	err := c.doPost(c.walletPath(walletID, accountID, "opens"), &CreateOpenReq{
+	err := c.doPost(c.accountPath(accountID, "opens"), &CreateOpenReq{
 		Name:       name,
 		FeeRate:    feeRate,
 		CreateOnly: createOnly,
@@ -120,9 +112,9 @@ func (c *Client) Open(walletID, accountID, name string, feeRate uint64, createOn
 	return res, err
 }
 
-func (c *Client) Bid(walletID, accountID, name string, feeRate, value, lockup uint64, createOnly bool) (*chain.Transaction, error) {
+func (c *Client) Bid(accountID, name string, feeRate, value, lockup uint64, createOnly bool) (*chain.Transaction, error) {
 	res := new(chain.Transaction)
-	err := c.doPost(c.walletPath(walletID, accountID, "bids"), &CreateBidReq{
+	err := c.doPost(c.accountPath(accountID, "bids"), &CreateBidReq{
 		Name:       name,
 		FeeRate:    feeRate,
 		Value:      value,
@@ -132,9 +124,9 @@ func (c *Client) Bid(walletID, accountID, name string, feeRate, value, lockup ui
 	return res, err
 }
 
-func (c *Client) Reveal(walletID, accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
+func (c *Client) Reveal(accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
 	res := new(chain.Transaction)
-	err := c.doPost(c.walletPath(walletID, accountID, "reveals"), &CreateRevealReq{
+	err := c.doPost(c.accountPath(accountID, "reveals"), &CreateRevealReq{
 		Name:       name,
 		FeeRate:    feeRate,
 		CreateOnly: createOnly,
@@ -142,9 +134,9 @@ func (c *Client) Reveal(walletID, accountID, name string, feeRate uint64, create
 	return res, err
 }
 
-func (c *Client) Redeem(walletID, accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
+func (c *Client) Redeem(accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
 	res := new(chain.Transaction)
-	err := c.doPost(c.walletPath(walletID, accountID, "redeems"), &CreateRedeemReq{
+	err := c.doPost(c.accountPath(accountID, "redeems"), &CreateRedeemReq{
 		Name:       name,
 		FeeRate:    feeRate,
 		CreateOnly: createOnly,
@@ -152,9 +144,9 @@ func (c *Client) Redeem(walletID, accountID, name string, feeRate uint64, create
 	return res, err
 }
 
-func (c *Client) Update(walletID, accountID, name string, resource *chain.Resource, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
+func (c *Client) Update(accountID, name string, resource *chain.Resource, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
 	res := new(chain.Transaction)
-	err := c.doPost(c.walletPath(walletID, accountID, "updates"), &CreateUpdateReq{
+	err := c.doPost(c.accountPath(accountID, "updates"), &CreateUpdateReq{
 		Name:       name,
 		Resource:   resource,
 		FeeRate:    feeRate,
@@ -163,9 +155,9 @@ func (c *Client) Update(walletID, accountID, name string, resource *chain.Resour
 	return res, err
 }
 
-func (c *Client) Transfer(walletID, accountID, name, address string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
+func (c *Client) Transfer(accountID, name, address string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
 	res := new(chain.Transaction)
-	err := c.doPost(c.walletPath(walletID, accountID, "transfers"), &CreateTransferReq{
+	err := c.doPost(c.accountPath(accountID, "transfers"), &CreateTransferReq{
 		Name:       name,
 		Address:    address,
 		FeeRate:    feeRate,
@@ -174,9 +166,9 @@ func (c *Client) Transfer(walletID, accountID, name, address string, feeRate uin
 	return res, err
 }
 
-func (c *Client) Finalize(walletID, accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
+func (c *Client) Finalize(accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
 	res := new(chain.Transaction)
-	err := c.doPost(c.walletPath(walletID, accountID, "finalizes"), &CreateFinalizeReq{
+	err := c.doPost(c.accountPath(accountID, "finalizes"), &CreateFinalizeReq{
 		Name:       name,
 		FeeRate:    feeRate,
 		CreateOnly: createOnly,
@@ -184,9 +176,9 @@ func (c *Client) Finalize(walletID, accountID, name string, feeRate uint64, crea
 	return res, err
 }
 
-func (c *Client) Renew(walletID, accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
+func (c *Client) Renew(accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
 	res := new(chain.Transaction)
-	err := c.doPost(c.walletPath(walletID, accountID, "renewals"), &CreateRenewalsReq{
+	err := c.doPost(c.accountPath(accountID, "renewals"), &CreateRenewalsReq{
 		Name:       name,
 		FeeRate:    feeRate,
 		CreateOnly: createOnly,
@@ -194,9 +186,9 @@ func (c *Client) Renew(walletID, accountID, name string, feeRate uint64, createO
 	return res, err
 }
 
-func (c *Client) Revoke(walletID, accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
+func (c *Client) Revoke(accountID, name string, feeRate uint64, createOnly bool) (*chain.Transaction, error) {
 	res := new(chain.Transaction)
-	err := c.doPost(c.walletPath(walletID, accountID, "revokes"), &CreateRevokeReq{
+	err := c.doPost(c.accountPath(accountID, "revokes"), &CreateRevokeReq{
 		Name:       name,
 		FeeRate:    feeRate,
 		CreateOnly: createOnly,
@@ -204,109 +196,118 @@ func (c *Client) Revoke(walletID, accountID, name string, feeRate uint64, create
 	return res, err
 }
 
-func (c *Client) Zap(walletID, accountID string) error {
-	return c.doPost(c.walletPath(walletID, accountID, "zap"), nil, nil)
+func (c *Client) TransferDutchAuctionListing(accountID, name string, feeRate uint64,
+) (*chain.Transaction, error) {
+	res := new(chain.Transaction)
+	err := c.doPost(c.accountPath(accountID, "dutch_auction_listing_transfers"), &DutchAuctionListingTransferReq{
+		Name:    name,
+		FeeRate: feeRate,
+	}, res)
+	return res, err
 }
 
-func (c *Client) Rescan(walletID, accountID string, height int) error {
-	return c.doPost(c.walletPath(walletID, accountID, "rescan"), &RescanReq{Height: height}, nil)
+func (c *Client) FinalizeDutchAuctionListing(accountID, name string, feeRate uint64) (*chain.Transaction, error) {
+	res := new(chain.Transaction)
+	err := c.doPost(c.accountPath(accountID, "dutch_auction_listing_finalizes"), &DutchAuctionListingFinalizeReq{
+		Name:    name,
+		FeeRate: feeRate,
+	}, res)
+	return res, err
 }
 
-func (c *Client) SignMessage(walletID, accountID, address, message string) (string, error) {
+func (c *Client) TransferDutchAuctionCancel(accountID, name string, feeRate uint64) (*chain.Transaction, error) {
+	res := new(chain.Transaction)
+	err := c.doPost(c.accountPath(accountID, "dutch_auction_cancel_transfers"), &DutchAuctionCancelTransferReq{
+		Name:    name,
+		FeeRate: feeRate,
+	}, res)
+	return res, err
+}
+
+func (c *Client) FinalizeDutchAuctionCancel(accountID, name string, feeRate uint64) (*chain.Transaction, error) {
+	res := new(chain.Transaction)
+	err := c.doPost(c.accountPath(accountID, "dutch_auction_cancel_finalizes"), &DutchAuctionCancelFinalizeReq{
+		Name:    name,
+		FeeRate: feeRate,
+	}, res)
+	return res, err
+}
+
+func (c *Client) UpdateDutchAuctionListing(accountID string, req *UpdateDutchAuctionListingsReq) (*shakedex.DutchAuction, error) {
+	res := new(shakedex.DutchAuction)
+	err := c.doPost(c.accountPath(accountID, "dutch_auction_listings"), req, res)
+	return res, err
+}
+
+func (c *Client) TransferDutchAuctionFill(accountID string, req *TransferDutchAuctionFillReq) (*chain.Transaction, error) {
+	res := new(chain.Transaction)
+	err := c.doPost(c.accountPath(accountID, "dutch_auction_fill_transfers"), req, res)
+	return res, err
+}
+
+func (c *Client) FinalizeDutchAuctionFill(accountID string, name string, feeRate uint64) (*chain.Transaction, error) {
+	res := new(chain.Transaction)
+	err := c.doPost(c.accountPath(accountID, "dutch_auction_fill_finalizes"), &DutchAuctionFillFinalizeReq{
+		Name:    name,
+		FeeRate: feeRate,
+	}, res)
+	return res, err
+}
+
+func (c *Client) Zap(accountID string) error {
+	return c.doPost(c.accountPath(accountID, "zap"), nil, nil)
+}
+
+func (c *Client) Rescan(accountID string, height int) error {
+	return c.doPost(c.accountPath(accountID, "rescan"), &RescanReq{Height: height}, nil)
+}
+
+func (c *Client) SignMessage(accountID, address, message string) (string, error) {
 	res := new(SignMessageRes)
-	err := c.doPost(c.walletPath(walletID, accountID, "sign_message"), &SignMessageReq{
+	err := c.doPost(c.accountPath(accountID, "sign_message"), &SignMessageReq{
 		Address: address,
 		Message: message,
 	}, res)
 	return res.Signature, err
 }
 
-func (c *Client) SignMessageWithName(walletID, accountID, name, message string) (string, error) {
+func (c *Client) SignMessageWithName(accountID, name, message string) (string, error) {
 	res := new(SignMessageRes)
-	err := c.doPost(c.walletPath(walletID, accountID, "sign_message_with_name"), &SignMessageWithNameReq{
+	err := c.doPost(c.accountPath(accountID, "sign_message_with_name"), &SignMessageWithNameReq{
 		Name:    name,
 		Message: message,
 	}, res)
 	return res.Signature, err
 }
 
-func (c *Client) UnspentBids(walletID, accountID string, count, offset int) (*UnspentBidsRes, error) {
+func (c *Client) UnspentBids(accountID string, count, offset int) (*UnspentBidsRes, error) {
 	res := new(UnspentBidsRes)
 	err := c.doGet(
-		c.walletPath(walletID, accountID, c.QueryStringPath("unspent_bids", PaginationQuery(count, offset))),
+		c.accountPath(accountID, c.QueryStringPath("unspent_bids", PaginationQuery(count, offset))),
 		res,
 	)
 	return res, err
 }
 
-func (c *Client) UnspentReveals(walletID, accountID string, count, offset int) (*UnspentRevealsRes, error) {
+func (c *Client) UnspentReveals(accountID string, count, offset int) (*UnspentRevealsRes, error) {
 	res := new(UnspentRevealsRes)
 	err := c.doGet(
-		c.walletPath(walletID, accountID, c.QueryStringPath("unspent_reveals", PaginationQuery(count, offset))),
+		c.accountPath(accountID, c.QueryStringPath("unspent_reveals", PaginationQuery(count, offset))),
 		res,
 	)
 	return res, err
 }
 
 func (c *Client) doGet(path string, resObj interface{}) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s", c.url, path), nil)
-	if err != nil {
-		return err
-	}
-	return c.doReq(req, resObj)
+	return ghttp.DefaultClient.DoGetJSON(fmt.Sprintf("%s/%s", c.url, path), resObj)
 }
 
-func (c *Client) doPost(path string, body interface{}, resObj interface{}) error {
-	var bodyB []byte
-	if body != nil {
-		bodyJ, err := json.Marshal(body)
-		if err != nil {
-			return err
-		}
-		bodyB = bodyJ
-	}
-
-	bodyR := bytes.NewReader(bodyB)
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", c.url, path), bodyR)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	return c.doReq(req, resObj)
+func (c *Client) doPost(path string, reqObj interface{}, resObj interface{}) error {
+	return ghttp.DefaultClient.DoPostJSON(fmt.Sprintf("%s/%s", c.url, path), reqObj, resObj)
 }
 
-func (c *Client) doReq(req *http.Request, resObj interface{}) error {
-	client := &http.Client{}
-	if c.apiKey != "" {
-		req.Header.Set("X-API-Key", c.apiKey)
-	}
-	res, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-
-	defer res.Body.Close()
-	resB, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-
-	if res.StatusCode < 200 || res.StatusCode > 300 {
-		return fmt.Errorf("http error %d: %s", res.StatusCode, resB)
-	}
-
-	if res.StatusCode == 204 {
-		return nil
-	}
-
-	if err := json.Unmarshal(resB, resObj); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *Client) walletPath(walletID, accountID string, suffixes ...string) string {
-	return fmt.Sprintf("api/v1/wallets/%s/accounts/%s/%s", walletID, accountID, strings.Join(suffixes, "/"))
+func (c *Client) accountPath(accountID string, suffixes ...string) string {
+	return fmt.Sprintf("api/v1/accounts/%s/%s", accountID, strings.Join(suffixes, "/"))
 }
 
 func (c *Client) QueryStringPath(name string, q url.Values) string {
