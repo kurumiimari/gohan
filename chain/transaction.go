@@ -106,18 +106,47 @@ func (tx *Transaction) SignatureHash(coins []*Coin, index int, script *Script, s
 	}
 
 	coin := coins[index]
+	input := tx.Inputs[index]
+	if !coin.Prevout.Equal(input.Prevout) {
+		panic("mis-matched coins and prevouts")
+	}
 
 	prevouts, _ := blake2b.New256(nil)
 	sequences, _ := blake2b.New256(nil)
 	outputs, _ := blake2b.New256(nil)
 
-	if sigOpts == SighashAll {
-		for _, c := range coins {
-			c.Prevout.WriteTo(prevouts)
-			bio.WriteUint32LE(sequences, DefaultSequence)
+	if sigOpts&SighashAnyoneCanPay == 0 {
+		for _, input := range tx.Inputs {
+			input.Prevout.WriteTo(prevouts)
 		}
+	}
+
+	rawSigopt := sigOpts & 0x1f
+
+	if sigOpts&SighashAnyoneCanPay == 0 &&
+		rawSigopt != SighashSingle &&
+		rawSigopt != SighashSingleReverse &&
+		rawSigopt != SighashNone {
+		for _, input := range tx.Inputs {
+			bio.WriteUint32LE(sequences, input.Sequence)
+		}
+	}
+
+	if rawSigopt != SighashSingle &&
+		rawSigopt != SighashSingleReverse &&
+		rawSigopt != SighashNone {
 		for _, o := range tx.Outputs {
 			o.WriteTo(outputs)
+		}
+	} else if rawSigopt == SighashSingle {
+		if index < len(tx.Outputs) {
+			out := tx.Outputs[index]
+			out.WriteTo(outputs)
+		}
+	} else if rawSigopt == SighashSingleReverse {
+		if index < len(tx.Outputs) {
+			out := tx.Outputs[len(tx.Outputs) - 1 - index]
+			out.WriteTo(outputs)
 		}
 	}
 
@@ -125,11 +154,11 @@ func (tx *Transaction) SignatureHash(coins []*Coin, index int, script *Script, s
 	bio.WriteUint32LE(sighash, tx.Version)
 	bio.WriteRawBytes(sighash, prevouts.Sum(nil))
 	bio.WriteRawBytes(sighash, sequences.Sum(nil))
-	bio.WriteRawBytes(sighash, coin.Prevout.Hash)
-	bio.WriteUint32LE(sighash, coin.Prevout.Index)
+	bio.WriteRawBytes(sighash, input.Prevout.Hash)
+	bio.WriteUint32LE(sighash, input.Prevout.Index)
 	script.WriteTo(sighash)
 	bio.WriteUint64LE(sighash, coin.Value)
-	bio.WriteUint32LE(sighash, DefaultSequence)
+	bio.WriteUint32LE(sighash, input.Sequence)
 	bio.WriteRawBytes(sighash, outputs.Sum(nil))
 	bio.WriteUint32LE(sighash, tx.Locktime)
 	bio.WriteUint32LE(sighash, uint32(sigOpts))

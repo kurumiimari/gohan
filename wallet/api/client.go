@@ -48,13 +48,13 @@ func (c *Client) CreateWallet(req *CreateWalletReq) (*CreateWalletRes, error) {
 }
 
 func (c *Client) Unlock(walletID string, password string) error {
-	return c.doPost(fmt.Sprintf("api/v1/wallets/%s/login", walletID), &LockReq{
+	return c.doPost(fmt.Sprintf("api/v1/wallets/%s/unlock", walletID), &UnlockReq{
 		Password: password,
 	}, nil)
 }
 
 func (c *Client) Lock(walletID string) error {
-	return c.doPost(fmt.Sprintf("api/v1/wallets/%s/login", walletID), nil, nil)
+	return c.doPost(fmt.Sprintf("api/v1/wallets/%s/lock", walletID), nil, nil)
 }
 
 func (c *Client) GetAccounts(walletID string) (*GetWalletAccountsRes, error) {

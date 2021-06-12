@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"github.com/kurumiimari/gohan/bio"
@@ -59,4 +60,9 @@ func (o *Outpoint) UnmarshalJSON(bytes []byte) error {
 	o.Hash = hash
 	o.Index = tmp.Index
 	return nil
+}
+
+func (o *Outpoint) Equal(other *Outpoint) bool {
+	return bytes.Equal(o.Hash, other.Hash) &&
+		o.Index == other.Index
 }

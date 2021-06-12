@@ -11,13 +11,13 @@ func WalletParams(r *http.Request) string {
 	return walletID
 }
 
-type LockReq struct {
+type UnlockReq struct {
 	Password string `json:"password"`
 }
 
 func (a *API) HandleWalletUnlockPOST(w http.ResponseWriter, r *http.Request) {
 	walletID := WalletParams(r)
-	req := new(LockReq)
+	req := new(UnlockReq)
 	if !UnmarshalRequestJSON(w, r, req) {
 		return
 	}
