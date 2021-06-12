@@ -4,8 +4,8 @@
       "name": "rhtnrfaemi",
       "type": "FINALIZE_IN",
       "out_idx": 0,
-      "parent_tx_hash": null,
-      "parent_out_idx": null,
+      "parent_tx_hash": "f53b0a49f66059095ddfa47adab7e477dc1306c93880a4ddd622344351c9d23e",
+      "parent_out_idx": 0,
       "transaction": {
         "hash": "9dcd4c72cb9ab6a68c9c7a2057971a5a5939ed2f479fe42006a9cdf862bcf5fc",
         "height": 53,

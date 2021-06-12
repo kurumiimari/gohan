@@ -113,8 +113,8 @@
       "name": "xpnjsegaep",
       "type": "TRANSFER",
       "out_idx": 0,
-      "parent_tx_hash": null,
-      "parent_out_idx": null,
+      "parent_tx_hash": "a891dc28488d8e43eaf2cb24f06dfbbe2ebbb60385a2d298e27436bf5bf3938c",
+      "parent_out_idx": 0,
       "transaction": {
         "hash": "8edc37294cb4c2ebe89b687d26ef803d2e03be0d408b717d1ea9d9fead0ea029",
         "height": 43,
@@ -224,8 +224,8 @@
       "name": "xpnjsegaep",
       "type": "REGISTER",
       "out_idx": 0,
-      "parent_tx_hash": null,
-      "parent_out_idx": null,
+      "parent_tx_hash": "0f374a976d6379bc1e737d0439b7074a8a5744abb159d4b649efd0a81f14cfbb",
+      "parent_out_idx": 0,
       "transaction": {
         "hash": "a891dc28488d8e43eaf2cb24f06dfbbe2ebbb60385a2d298e27436bf5bf3938c",
         "height": 41,
