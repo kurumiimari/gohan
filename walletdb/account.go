@@ -260,6 +260,21 @@ WHERE ROWID IN (
 	}
 
 	_, err = tx.Exec(`
+DELETE FROM coins
+WHERE ROWID IN (
+	SELECT coins.ROWID FROM coins
+	JOIN transactions ON (transactions.hash = coins.tx_hash AND transactions.account_id = coins.account_id)
+	WHERE transactions.block_height > ? AND coins.account_id = ?	
+)
+`,
+		height,
+		accountID,
+	)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	_, err = tx.Exec(`
 UPDATE transactions SET 
 block_height = -1, block_hash = '0000000000000000000000000000000000000000000000000000000000000000'
 WHERE account_id = ? AND block_height > ?

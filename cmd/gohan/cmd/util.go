@@ -23,7 +23,7 @@ func apiClient() (*api.Client, error) {
 	_, err := client.Status()
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") {
-			return nil, errors.New("connection to HSD refused - did you select the right network?")
+			return nil, errors.New("connection to gohan refused - did you select the right network?")
 		}
 		return nil, err
 	}

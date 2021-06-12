@@ -261,21 +261,20 @@ AND name_history.type = 'BID'
 	return bids, errors.WithStack(err)
 }
 
-func GetRedeemableReveals(q Querier, accountID string, name string, network *chain.Network, renewHeight int) ([]*RedeemableReveal, error) {
+func GetRedeemableReveals(q Querier, accountID string, name string) ([]*RedeemableReveal, error) {
 	rows, err := q.Query(`
 SELECT name_history.tx_hash, name_history.out_idx FROM name_history
 JOIN transactions ON (transactions.hash = name_history.tx_hash AND transactions.account_id = name_history.account_id)
-LEFT OUTER JOIN name_history AS child 
-ON child.parent_tx_hash = name_history.tx_hash AND child.parent_out_idx = name_history.out_idx
+JOIN coins ON (coins.tx_hash = name_history.tx_hash AND coins.out_idx = name_history.out_idx)
+LEFT OUTER JOIN name_history AS child ON (child.parent_tx_hash = name_history.tx_hash AND child.parent_out_idx = name_history.out_idx)
 WHERE name_history.account_id = ? 
-AND name_history.name = ? 
-AND transactions.block_height > ?
+AND name_history.name = ?
+AND coins.value > 0
 AND child.parent_tx_hash IS NULL
 AND name_history.type = 'REVEAL'
 `,
 		accountID,
 		name,
-		renewHeight-network.BiddingPeriod,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "error querying redeemable reveals")
@@ -415,12 +414,14 @@ LIMIT ? OFFSET ?
 func GetUnspentReveals(tx Transactor, accountID string, count, offset int) ([]*UnspentReveal, error) {
 	rows, err := tx.Query(`
 SELECT name_history.tx_hash, name_history.out_idx, name_history.value, name_history.name, transactions.block_height FROM name_history
+JOIN coins ON (coins.tx_hash = name_history.tx_hash AND coins.out_idx = name_history.out_idx)
 JOIN transactions ON (transactions.hash = name_history.tx_hash AND transactions.account_id = name_history.account_id)
 LEFT OUTER JOIN name_history AS child 
 ON child.parent_tx_hash = name_history.tx_hash AND child.parent_out_idx = name_history.out_idx
 WHERE name_history.account_id = ? 
 AND child.parent_tx_hash IS NULL
 AND name_history.type = 'REVEAL'
+AND coins.value > 0
 ORDER BY name_history.name ASC
 LIMIT ? OFFSET ?
 `,

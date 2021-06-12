@@ -421,7 +421,7 @@ func (a *Account) Redeem(name string, feeRate uint64) (*chain.Transaction, error
 	winner := state.Info.Owner
 
 	return a.txTransactor(func(dTx walletdb.Transactor) (*chain.Transaction, error) {
-		localReveals, err := walletdb.GetRedeemableReveals(dTx, a.id, name, a.network, state.Info.Stats.RenewalPeriodStart)
+		localReveals, err := walletdb.GetRedeemableReveals(dTx, a.id, name)
 		if err != nil {
 			return nil, err
 		}
