@@ -63,6 +63,8 @@ hsd --no-wallet
 
 No special indexing options are required, though you are welcome to specify them for your own purposes. They won't interfere with Gohan's operation.
 
+Next, start the Gohan wallet node with `gohan start`. You should see log messages appearing in your terminal.
+
 You can now use the Gohan CLI. Run `gohan --help` to view a list of commands. You'll see output that looks something like this:
 
 ```
