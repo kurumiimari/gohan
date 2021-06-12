@@ -1249,21 +1249,30 @@ func (a *Account) scanCovenant(q walletdb.Transactor, tx *chain.Transaction, out
 		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
 		entry.ParentOutIdx = input.Prevout.Index
 	case chain.CovenantRegister:
+		input := tx.Inputs[outIdx]
 		entry.NameHash = out.Covenant.Items[0]
 		entry.Type = walletdb.NameActionRegister
+		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
+		entry.ParentOutIdx = input.Prevout.Index
 		if err := walletdb.UpsertNameHash(q, a.id, entry.NameHash, walletdb.NameStatusOwned); err != nil {
 			return err
 		}
 	case chain.CovenantTransfer:
+		input := tx.Inputs[outIdx]
 		entry.NameHash = out.Covenant.Items[0]
 		entry.Type = walletdb.NameActionTransfer
+		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
+		entry.ParentOutIdx = input.Prevout.Index
 		if err := walletdb.UpsertNameHash(q, a.id, entry.NameHash, walletdb.NameStatusTransferring); err != nil {
 			return err
 		}
 	case chain.CovenantFinalize:
+		input := tx.Inputs[outIdx]
 		name := string(out.Covenant.Items[2])
 		entry.Name = name
 		entry.Type = walletdb.NameActionFinalizeIn
+		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
+		entry.ParentOutIdx = input.Prevout.Index
 		if err := walletdb.UpsertName(q, a.id, entry.Name, walletdb.NameStatusOwned); err != nil {
 			return err
 		}
@@ -1276,6 +1285,12 @@ func (a *Account) scanCovenant(q walletdb.Transactor, tx *chain.Transaction, out
 		if err := walletdb.UpsertNameHash(q, a.id, entry.NameHash, walletdb.NameStatusRevoked); err != nil {
 			return err
 		}
+	case chain.CovenantUpdate:
+		input := tx.Inputs[outIdx]
+		entry.NameHash = out.Covenant.Items[0]
+		entry.Type = walletdb.NameActionUpdate
+		entry.ParentTxHash = hex.EncodeToString(input.Prevout.Hash)
+		entry.ParentOutIdx = input.Prevout.Index
 	default:
 		return nil
 	}

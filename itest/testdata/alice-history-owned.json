@@ -118,8 +118,8 @@
       "name": "whncsjjgtc",
       "type": "TRANSFER",
       "out_idx": 0,
-      "parent_tx_hash": null,
-      "parent_out_idx": null,
+      "parent_tx_hash": "ac5dccf6244b51514a2c2a38ff5bd294e435f91858576fc742e4522658d8696e",
+      "parent_out_idx": 0,
       "transaction": {
         "hash": "05e52af86197be24b2a5d87d00209ecc18dff4af8ade10fb9cc3150bcd657730",
         "height": 43,
@@ -226,10 +226,120 @@
     },
     {
       "name": "whncsjjgtc",
+      "type": "UPDATE",
+      "out_idx": 0,
+      "parent_tx_hash": "af52b23cb75487249a70fbc6d9bca4af6081e656c36211e3f8f6c5d26aeff168",
+      "parent_out_idx": 0,
+      "transaction": {
+        "hash": "ac5dccf6244b51514a2c2a38ff5bd294e435f91858576fc742e4522658d8696e",
+        "height": 42,
+        "block": "6a00b299fb84b1db22aa05c6e629501e559084a08e360b94c79387256e7c59f0",
+        "time": 1622680634,
+        "index": 2,
+        "version": 0,
+        "inputs": [
+          {
+            "prevout": {
+              "hash": "af52b23cb75487249a70fbc6d9bca4af6081e656c36211e3f8f6c5d26aeff168",
+              "index": 0
+            },
+            "witness": [
+              "e67e03a8faf081d5f6076ad635caaef89228deaf4eb313a241d558d2ffa19ab63269104ebbedcaa78eddad95c100dd99c9da6210b0ca31ccdaf9735610c122c401",
+              "02d91c92f8658f749a030ebee2208210fc46577c2d26d545fa93ffb1c1bf695b44"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 41,
+              "value": 150000000,
+              "address": {
+                "address": "rs1q33dc3ckfm3e50gg8nng2glfy6q76fvt0nupu82",
+                "derivation": "m/0/4",
+                "own": true
+              },
+              "covenant": {
+                "type": 6,
+                "action": "REGISTER",
+                "items": [
+                  "5202baa89200c25a2b727d175e394007370ad57bf394da2599192d498b39e868",
+                  "0b000000",
+                  "00",
+                  "ae3895cf597eff05b19e02a70ceeeecb9dc72dbfe6504a50e9343a72f06a87c5"
+                ]
+              },
+              "coinbase": false
+            }
+          },
+          {
+            "prevout": {
+              "hash": "2ec4da7047187cc56e243c4f32819a09b216554da005fe3b5ba7e8cf94dfa94f",
+              "index": 1
+            },
+            "witness": [
+              "b89a75a0977cdb4cb8d106188727342a82063ff56431fe4f320447665c802c436df5aea08e423f165abbe6192ee1a8677a9be2cd3193a89e12c52239b98c2ad901",
+              "03d40c04c8f98c808d9b514ce63bb793fd2cd0a401edf37c7ebca5e4c3b6a71535"
+            ],
+            "sequence": 4294967295,
+            "coin": {
+              "version": 0,
+              "height": 11,
+              "value": 1999996220,
+              "address": {
+                "address": "rs1q3dnzyz9kamtcej877a90jrcnh5jr3wm7zgzrw7",
+                "derivation": "m/1/2",
+                "own": true
+              },
+              "covenant": {
+                "type": 0,
+                "action": "NONE",
+                "items": []
+              },
+              "coinbase": false
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "value": 150000000,
+            "address": {
+              "address": "rs1q33dc3ckfm3e50gg8nng2glfy6q76fvt0nupu82",
+              "derivation": "m/0/4",
+              "own": true
+            },
+            "covenant": {
+              "type": 7,
+              "action": "UPDATE",
+              "items": [
+                "5202baa89200c25a2b727d175e394007370ad57bf394da2599192d498b39e868",
+                "0b000000",
+                "0001036e7331076578616d706c6503636f6d00"
+              ]
+            }
+          },
+          {
+            "value": 1999990940,
+            "address": {
+              "address": "rs1qrsgv44fahphkf22vgm9dl50h7h9w2evp590exh",
+              "derivation": "m/1/15",
+              "own": true
+            },
+            "covenant": {
+              "type": 0,
+              "action": "NONE",
+              "items": []
+            }
+          }
+        ],
+        "hex": "0000000002af52b23cb75487249a70fbc6d9bca4af6081e656c36211e3f8f6c5d26aeff16800000000ffffffff2ec4da7047187cc56e243c4f32819a09b216554da005fe3b5ba7e8cf94dfa94f01000000ffffffff0280d1f0080000000000148c5b88e2c9dc7347a1079cd0a47d24d03da4b16f0703205202baa89200c25a2b727d175e394007370ad57bf394da2599192d498b39e868040b000000130001036e7331076578616d706c6503636f6d009c7035770000000000141c10cad53db86f64a94c46cadfd1f7f5cae565810000000000000241e67e03a8faf081d5f6076ad635caaef89228deaf4eb313a241d558d2ffa19ab63269104ebbedcaa78eddad95c100dd99c9da6210b0ca31ccdaf9735610c122c4012102d91c92f8658f749a030ebee2208210fc46577c2d26d545fa93ffb1c1bf695b440241b89a75a0977cdb4cb8d106188727342a82063ff56431fe4f320447665c802c436df5aea08e423f165abbe6192ee1a8677a9be2cd3193a89e12c52239b98c2ad9012103d40c04c8f98c808d9b514ce63bb793fd2cd0a401edf37c7ebca5e4c3b6a71535",
+        "fee": 5280
+      }
+    },
+    {
+      "name": "whncsjjgtc",
       "type": "REGISTER",
       "out_idx": 0,
-      "parent_tx_hash": null,
-      "parent_out_idx": null,
+      "parent_tx_hash": "c83ffe91abd049a2f0852ab2f43f9b46771ca3e0efe773a74d079952cecf3ce4",
+      "parent_out_idx": 0,
       "transaction": {
         "hash": "af52b23cb75487249a70fbc6d9bca4af6081e656c36211e3f8f6c5d26aeff168",
         "height": 41,
