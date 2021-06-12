@@ -123,3 +123,7 @@ For a full description of all these commands and their underyling REST endpoints
 # Security
 
 If you encounter a security issue, please don't open an issue on GitHub. Instead, e-mail me directly at `kurumiimari@protonmail.com`. My GPG key fingerprint is `2CD9 6539 D07E 7FD1 431C  DC0E 684A 02A9 B872 4012`; this is also the key I use to sign the Gohan binaries. You can also use my default key on Protonmail.
+
+# MORE POWER
+
+<img src="./images/MORE-POWER.gif">
