@@ -95,7 +95,7 @@ Available Commands:
   transactions           Lists transactions for an account
   transfer               Transfers a name
   unlock                 Unlocks a wallet
-  unlock                 Locks a wallet
+  lock                   Locks a wallet
   unspent-bids           Returns all bids that haven't been revealed yet
   unspent-reveals        Returns all reveals that haven't been redeemed yet
   update                 Sends an update

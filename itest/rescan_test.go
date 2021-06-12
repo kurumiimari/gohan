@@ -38,9 +38,7 @@ func (s *RescanSuite) SetupSuite() {
 }
 
 func (s *RescanSuite) TearDownSuite() {
-	if s.cleanup != nil {
-		s.cleanup()
-	}
+	s.cleanup()
 	s.hsd.Stop()
 }
 

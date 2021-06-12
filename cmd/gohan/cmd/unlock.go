@@ -34,7 +34,7 @@ var unlockCmd = &cobra.Command{
 }
 
 var lockCmd = &cobra.Command{
-	Use:   "unlock",
+	Use:   "lock",
 	Short: "Locks a wallet",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := apiClient()

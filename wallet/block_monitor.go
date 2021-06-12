@@ -130,6 +130,8 @@ func (b *BlockMonitor) poll() error {
 		if err := b.updateBlockCheckpoints(info.Blocks); err != nil {
 			return err
 		}
+		b.lastHeight = info.Blocks
+		b.sendNotifications(info.Blocks, info.Blocks)
 		return nil
 	}
 
@@ -249,9 +251,7 @@ func (b *BlockMonitor) sendNotifications(chainTip int, commonTip int) {
 		ChainTip:  chainTip,
 		CommonTip: commonTip,
 	}
-	subsCopy := make([]chan *BlockNotification, len(b.subs))
-	copy(subsCopy, b.subs)
-	for _, sub := range subsCopy {
+	for _, sub := range b.subs {
 		sub <- notif
 	}
 }

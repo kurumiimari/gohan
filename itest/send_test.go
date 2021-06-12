@@ -34,7 +34,15 @@ func (s *AccountSendSuite) TearDownTest() {
 
 func (s *AccountSendSuite) TestSendWalletLocked() {
 	t := s.T()
-	_, err := s.client.Send("alice", "default", 10000, 10000, ZeroRegtestAddr, false)
+
+	info, err := s.client.GetAccount("alice", "default")
+	require.NoError(t, err)
+
+	mineTo(t, s.hsd.Client, s.client, 1, info.ReceiveAddress)
+	awaitHeight(t, s.client, "alice", "default", 1)
+	mineTo(t, s.hsd.Client, s.client, chain.NetworkRegtest.CoinbaseMaturity + 1, ZeroRegtestAddr)
+
+	_, err = s.client.Send("alice", "default", 10000, 10000, ZeroRegtestAddr, false)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "locked")
 }

@@ -101,6 +101,11 @@ func NewAccount(
 func (a *Account) Start() error {
 	a.tmb.Go(func() error {
 		blockC := a.bm.Subscribe()
+
+		if err := a.bm.poll(); err != nil {
+			a.lgr.Error("error on initial poll", "err", err)
+		}
+
 		for {
 			select {
 			case <-a.tmb.Dying():
@@ -874,7 +879,7 @@ func (a *Account) lockedRescan(notif *BlockNotification) error {
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
 
-	if notif.ChainTip > notif.CommonTip {
+	if a.rescanHeight > notif.CommonTip && notif.ChainTip > notif.CommonTip {
 		if err := a.rollback(notif.CommonTip); err != nil {
 			return err
 		}
