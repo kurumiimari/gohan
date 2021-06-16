@@ -49,6 +49,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&walletID, "wallet-id", "w", "primary", "Sets the wallet ID")
 	rootCmd.PersistentFlags().StringVarP(&accountID, "account-id", "a", "default", "Sets the account ID")
 	rootCmd.PersistentFlags().StringVar(&walletAPIKey, "api-key", "", "Sets the wallet's API key.")
+	rootCmd.PersistentFlags().StringVar(&nodeAPIKey, "node-api-key", "", "Sets the Handshake full node's API key.")
 }
 
 func Execute() {

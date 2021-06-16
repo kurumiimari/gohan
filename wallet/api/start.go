@@ -11,8 +11,8 @@ import (
 	"net/http"
 )
 
-func Start(tmb *tomb.Tomb, network *chain.Network, prefix string, apiKey string) error {
-	nodeClient := client.NewNodeRPCClient(fmt.Sprintf("http://localhost:%d", network.NodePort), "")
+func Start(tmb *tomb.Tomb, network *chain.Network, prefix, apiKey, nodeAPIKey string) error {
+	nodeClient := client.NewNodeRPCClient(fmt.Sprintf("http://localhost:%d", network.NodePort), nodeAPIKey)
 
 	engine, err := walletdb.NewEngine(prefix)
 	if err != nil {

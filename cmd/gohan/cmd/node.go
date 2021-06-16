@@ -12,6 +12,7 @@ import (
 
 var (
 	walletAPIKey string
+	nodeAPIKey   string
 )
 
 var statusCmd = &cobra.Command{
@@ -49,7 +50,7 @@ var startCmd = &cobra.Command{
 			}
 		}()
 
-		return api.Start(tmb, gohan.Config.Network, gohan.Config.Prefix, walletAPIKey)
+		return api.Start(tmb, gohan.Config.Network, gohan.Config.Prefix, walletAPIKey, nodeAPIKey)
 	},
 }
 
