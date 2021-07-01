@@ -51,8 +51,8 @@ func (s *AccountSuite) TestGetAccountInfo() {
 	info, err := s.client.GetAccount("alice")
 	require.NoError(t, err)
 	require.Equal(t, &api.AccountGetRes{
-		ID:         "alice",
-		Index:      0,
+		ID:    "alice",
+		Index: 0,
 		Balances: &walletdb.Balances{
 			Available:    0,
 			Immature:     0,

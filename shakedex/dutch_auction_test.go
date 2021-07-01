@@ -129,7 +129,7 @@ func TestCreateDutchAuction(t *testing.T) {
 	t.Parallel()
 
 	t.Run("invalid start and end bids", func(t *testing.T) {
-		_, err := CreateDutchAuction(nil, "foobar", 0, 100, 200, 0, 10, 0, nil, nil, nil)
+		_, err := CreateDutchAuction(nil, 0, "foobar", 0, 100, 200, 0, 10, 0, nil, nil, nil)
 		require.Error(t, err)
 	})
 
@@ -193,7 +193,8 @@ func TestCreateDutchAuction(t *testing.T) {
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("%d-%s", i, tt.name), func(t *testing.T) {
 			auction, err := CreateDutchAuction(
-				lockCoin,
+				lockCoin.Prevout,
+				lockCoin.Value,
 				"xsqtx",
 				100,
 				tt.start,

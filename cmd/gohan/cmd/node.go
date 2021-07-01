@@ -50,7 +50,7 @@ var startCmd = &cobra.Command{
 			}
 		}()
 
-		return api.Start(tmb, gohan.Config.Network, gohan.Config.Prefix, walletAPIKey, nodeAPIKey)
+		return api.Start(tmb, gohan.Config.Network, gohan.Config.Prefix, walletAPIKey, nodeAPIKey, nodeURL)
 	},
 }
 

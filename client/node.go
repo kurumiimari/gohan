@@ -203,6 +203,12 @@ func (c *NodeRPCClient) GetNameByHash(hash []byte) (string, error) {
 	return res, err
 }
 
+func (c *NodeRPCClient) GetBloomByHeight(heights []int) ([]*GetBloomRes, error) {
+	var res []*GetBloomRes
+	err := c.rpcClient.CallFor(&res, "getbloombyheight", heights)
+	return res, err
+}
+
 func (c *NodeRPCClient) doRestGet(path string, resObj interface{}) error {
 	return ghttp.DefaultClient.DoGetJSON(
 		fmt.Sprintf("%s/%s", c.url, path),

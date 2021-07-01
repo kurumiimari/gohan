@@ -10,6 +10,32 @@ const (
 	xPub = "xpub6BudTY3ybzN3FC6cLJiYprizHUWMC1UZyK4f7mB6r6DYJPnMT1tRgUtcWzcjBmCrQbJHb1JpbERigfL1a7X2JJsBZVbxXV5PgoDfoUzp43Y"
 )
 
+//func TestInterop(t *testing.T) {
+//	bloom := bloom.New(1678, 23)
+//	bloom.Add([]byte("test string"))
+//	bloom.Add([]byte{0x01, 0x02, 0x03})
+//	bloom.Add(make([]byte, 32, 32))
+//	buf := new(bytes.Buffer)
+//	bloom.WriteTo(buf)
+//	fmt.Println(hex.EncodeToString(buf.Bytes()))
+//
+//	m := murmur3.New128()
+//	m.Write([]byte("test string"))
+//	a, b := m.Sum128()
+//	m.Write([]byte{1})
+//	c, d := m.Sum128()
+//	bb := make([]byte, 16)
+//	binary.BigEndian.PutUint64(bb, a)
+//	binary.BigEndian.PutUint64(bb[8:], b)
+//	bi := new(big.Int)
+//	bi.SetBytes(bb)
+//	fmt.Println(bi)
+//	binary.BigEndian.PutUint64(bb, c)
+//	binary.BigEndian.PutUint64(bb[8:], d)
+//	bi.SetBytes(bb)
+//	fmt.Println(bi)
+//}
+
 //func TestEstimateParameters(t *testing.T) {
 //	m, k := bloom.EstimateParameters(100000, 0.000001)
 //	fmt.Println(m)

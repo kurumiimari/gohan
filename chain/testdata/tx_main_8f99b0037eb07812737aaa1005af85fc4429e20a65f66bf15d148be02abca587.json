@@ -12,10 +12,7 @@
   "vout": [
     {
       "value": 2000111800,
-      "address": {
-        "version": 0,
-        "hash": "00bfb1e341bb84a68dd0bc1781c5ece5e5dc3282"
-      },
+      "address": "rs1qqzlmrc6phwz2drwshstcr30vuhjacv5zvx599d",
       "covenant": {
         "type": 0,
         "action": "NONE",

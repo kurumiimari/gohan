@@ -1011,7 +1011,7 @@ func (a *Account) FinalizeDutchAuction(
 	}
 
 	return a.txTransactor(func(dTx walletdb.Transactor) (*chain.Transaction, error) {
-		coin, err := walletdb.GetFinalizableDutchAuctionFillCoin(dTx, a.id, name)
+		coin, recipAddr, err := walletdb.GetFinalizableDutchAuctionFillCoin(dTx, a.id, name)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errors.New("you did not win this auction")
 		}
@@ -1036,7 +1036,7 @@ func (a *Account) FinalizeDutchAuction(
 		txb.AddCoin(coin.AsChain())
 		txb.AddOutput(&chain.Output{
 			Value:   coin.Value,
-			Address: a.recvMgr.Address(),
+			Address: recipAddr.Address,
 			Covenant: chain.NewFinalizeCovenant(
 				name,
 				state.Info.Weak,
@@ -1989,7 +1989,7 @@ func (a *Account) scanIncomingFinalize(q walletdb.Transactor, tx *chain.Transact
 
 	var coinType walletdb.CoinType
 	if txscript.IsHIP1LockingScript(tx.Witnesses[outIdx]) {
-		coin, err := walletdb.GetCoinByPrevout(q, a.id, input.Prevout)
+		coin, err := walletdb.GetDutchAuctionCoin(q, a.id, input.Prevout)
 		if err != nil {
 			return false, err
 		}

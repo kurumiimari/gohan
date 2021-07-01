@@ -230,7 +230,6 @@ func NewUpdateCovenant(name string, height int, resource *Resource) *Covenant {
 	}
 }
 
-
 func NewTransferCovenant(name string, height int, transferee *Address) *Covenant {
 	return &Covenant{
 		Type: CovenantTransfer,

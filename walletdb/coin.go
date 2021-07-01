@@ -140,21 +140,43 @@ func GetCoinByPrevout(tx Transactor, accountID string, prevout *chain.Outpoint) 
 	return scanCoin(row)
 }
 
-func HasCoinByPrevout(tx Transactor, accountID string, outpoint *chain.Outpoint) (bool, error) {
-	row := tx.QueryRow(
-		"SELECT EXISTS(SELECT 1 FROM coins WHERE coins.account_id = ? AND tx_hash = ? AND out_idx = ?)",
+func GetDutchAuctionCoin(tx Transactor, accountID string, prevout *chain.Outpoint) (*Coin, error) {
+	row := tx.QueryRow(`
+SELECT 
+	coins.account_id AS account_id,
+	txout.block_hash IS NOT NULL as spent,
+	coins.name_hash AS name_hash,
+	coins.type AS type,
+	txin.block_height AS height,
+	coins.value as VALUE,
+	coins.address AS address,
+	coins.covenant_type AS covenant_type,
+	coins.covenant_items AS covenant_items,
+	coins.tx_hash AS tx_hash, 
+	coins.out_idx AS out_idx,
+	coins.coinbase AS coinbase,
+	0 as branch,
+	0 as idx
+FROM coins
+INNER JOIN transactions AS txin ON txin.account_id = coins.account_id AND txin.hash = coins.tx_hash
+LEFT JOIN transactions AS txout ON txout.account_id = coins.account_id AND txout.hash = coins.spending_tx_hash
+AND coins.account_id = ?
+AND tx_hash = ?
+AND out_idx = ?
+`,
 		accountID,
-		outpoint.Hash.String(),
-		outpoint.Index,
+		prevout.Hash.String(),
+		prevout.Index,
 	)
-	var out bool
-	if err := row.Err(); err != nil {
-		return out, errors.WithStack(row.Err())
+	if row.Err() != nil {
+		return nil, errors.WithStack(row.Err())
 	}
-	if err := row.Scan(&out); err != nil {
-		return out, errors.WithStack(err)
+	coin, err := scanCoin(row)
+	if err != nil {
+		return nil, err
 	}
-	return out, nil
+	coin.Derivation = nil
+	return coin, nil
 }
 
 func UpdateCoinSpent(tx Transactor, outpoint *chain.Outpoint, spendHash gcrypto.Hash) error {
@@ -220,24 +242,54 @@ func GetUnspentCoins(q Querier, accountID string) ([]*Coin, error) {
 	return coins, errors.WithStack(err)
 }
 
-func GetFinalizableDutchAuctionFillCoin(q Querier, accountID, name string) (*Coin, error) {
+func GetFinalizableDutchAuctionFillCoin(q Querier, accountID, name string) (*Coin, *Address, error) {
 	row := q.QueryRow(
-		coinQuery(`
-WHERE coins.spending_tx_hash IS NULL
+		`
+SELECT 
+	coins.account_id AS account_id,
+	txout.block_hash IS NOT NULL as spent,
+	coins.name_hash AS name_hash,
+	coins.type AS type,
+	txin.block_height AS height,
+	coins.value as VALUE,
+	coins.address AS address,
+	coins.covenant_type AS covenant_type,
+	coins.covenant_items AS covenant_items,
+	coins.tx_hash AS tx_hash, 
+	coins.out_idx AS out_idx,
+	coins.coinbase AS coinbase,
+	0 as branch,
+	0 as idx
+FROM coins
+INNER JOIN transactions AS txin ON txin.account_id = coins.account_id AND txin.hash = coins.tx_hash
+LEFT JOIN transactions AS txout ON txout.account_id = coins.account_id AND txout.hash = coins.spending_tx_hash
+WHERE coins.spending_tx_hash IS NULL  
 AND coins.account_id = ?
 AND coins.type = ?
 AND coins.covenant_type = ?
 AND coins.name_hash = ?
-`),
+`,
 		accountID,
 		uint8(CoinTypeDutchAuctionFill),
 		uint8(chain.CovenantTransfer),
 		chain.HashName(name),
 	)
 	if row.Err() != nil {
-		return nil, errors.WithStack(row.Err())
+		return nil, nil, errors.WithStack(row.Err())
 	}
-	return scanCoin(row)
+	coin, err := scanCoin(row)
+	if err != nil {
+		return nil, nil, err
+	}
+	addr, err := GetAddress(q, accountID, &chain.Address{
+		Version: coin.Covenant.Items[2][0],
+		Hash:    coin.Covenant.Items[3],
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	coin.Derivation = nil
+	return coin, addr, nil
 }
 
 func GetTransferrableDutchAuctionCancelCoin(q Querier, accountID, name string) (*Coin, error) {
@@ -331,7 +383,7 @@ SELECT
 	addr.branch AS address_branch,
 	addr.idx AS address_index
 FROM coins
-INNER JOIN addresses AS addr ON addr.address = coins.address
+INNER JOIN addresses AS addr ON addr.account_id = coins.account_id AND addr.address = coins.address
 INNER JOIN transactions AS txin ON txin.account_id = coins.account_id AND txin.hash = coins.tx_hash
 LEFT JOIN transactions AS txout ON txout.account_id = coins.account_id AND txout.hash = coins.spending_tx_hash
 `

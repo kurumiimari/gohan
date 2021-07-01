@@ -269,7 +269,7 @@ var transferDutchAuctionFill = &cobra.Command{
 	},
 }
 
-var finalizeDutchAuctionFill = &cobra.Command{
+var finalizeDutchAuctionFillCmd = &cobra.Command{
 	Use:   "finalize-fill [name] <override-fee-rate-subunits>",
 	Short: "Finalizes a fill",
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -406,7 +406,7 @@ func init() {
 	dutchAuctionsCmd.AddCommand(finalizeDutchAuctionListingCmd)
 	dutchAuctionsCmd.AddCommand(postDutchAuctionListingCmd)
 	dutchAuctionsCmd.AddCommand(transferDutchAuctionFill)
-	dutchAuctionsCmd.AddCommand(finalizeDutchAuctionFill)
+	dutchAuctionsCmd.AddCommand(finalizeDutchAuctionFillCmd)
 	dutchAuctionsCmd.AddCommand(transferDutchAuctionCancelCmd)
 	dutchAuctionsCmd.AddCommand(finalizeDutchAuctionCancelCmd)
 }

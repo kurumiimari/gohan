@@ -2,7 +2,6 @@ package itest
 
 import (
 	"github.com/kurumiimari/gohan/chain"
-	"github.com/kurumiimari/gohan/gjson"
 	"github.com/kurumiimari/gohan/shakedex"
 	"github.com/kurumiimari/gohan/wallet/api"
 	"github.com/kurumiimari/gohan/walletdb"
@@ -135,7 +134,7 @@ func (s *DutchAuctionSuite) fill() {
 
 	_, err := s.client.TransferDutchAuctionFill("bob", &api.TransferDutchAuctionFillReq{
 		Name:             s.name,
-		LockScriptTxHash: gjson.ByteString(s.auction.LockingOutpoint.Hash),
+		LockScriptTxHash: s.auction.LockingOutpoint.Hash,
 		LockScriptOutIdx: s.auction.LockingOutpoint.Index,
 		PaymentAddress:   s.auction.PaymentAddress,
 		FeeAddress:       s.auction.FeeAddress,

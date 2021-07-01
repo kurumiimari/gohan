@@ -43,7 +43,7 @@ func startDaemon(t *testing.T) (*api.Client, func()) {
 	tmb := new(tomb.Tomb)
 
 	tmb.Go(func() error {
-		return api.Start(tmb, chain.NetworkRegtest, prefix, "", "")
+		return api.Start(tmb, chain.NetworkRegtest, prefix, "", "", "")
 	})
 
 	cleanup := func() {

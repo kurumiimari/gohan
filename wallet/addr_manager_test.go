@@ -16,7 +16,7 @@ func TestAddrManager(t *testing.T) {
 		chain.HardenNode(chain.NetworkRegtest.KeyPrefix.CoinType),
 		chain.HardenNode(0),
 	}...)
-	ring := NewAccountKeyring(NewEKPrivateKeyer(mk), derived, chain.NetworkRegtest, 0)
+	ring := NewAccountKeyring(NewEKPrivateKeyer(mk), derived, chain.NetworkRegtest)
 	dTx := new(dummyTransactor)
 
 	tests := []struct {

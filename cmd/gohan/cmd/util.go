@@ -12,10 +12,10 @@ import (
 
 func apiClient() (*api.Client, error) {
 	var url string
-	if serverURL == "" {
+	if walletURL == "" {
 		url = fmt.Sprintf("http://localhost:%d", gohan.Config.Network.WalletPort)
 	} else {
-		url = serverURL
+		url = walletURL
 	}
 
 	client := api.NewClient(url, walletAPIKey)

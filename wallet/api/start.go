@@ -11,9 +11,15 @@ import (
 	"net/http"
 )
 
-func Start(tmb *tomb.Tomb, network *chain.Network, prefix, apiKey, nodeAPIKey string) error {
+func Start(tmb *tomb.Tomb, network *chain.Network, prefix, apiKey, nodeAPIKey, altNodeURL string) error {
 	chain.SetCurrNetwork(network)
-	nodeClient := client.NewNodeClient(fmt.Sprintf("http://localhost:%d", network.NodePort), nodeAPIKey)
+	var nodeURL string
+	if altNodeURL == "" {
+		nodeURL = fmt.Sprintf("http://localhost:%d", network.NodePort)
+	} else {
+		nodeURL = altNodeURL
+	}
+	nodeClient := client.NewNodeClient(nodeURL, nodeAPIKey)
 	engine, err := walletdb.NewEngine(prefix)
 	if err != nil {
 		return err

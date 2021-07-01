@@ -2,11 +2,11 @@ package wallet
 
 import (
 	"bytes"
+	"github.com/bits-and-blooms/bloom/v3"
 	"github.com/kurumiimari/gohan/chain"
 	"github.com/kurumiimari/gohan/txscript"
 	"github.com/kurumiimari/gohan/walletdb"
 	"github.com/pkg/errors"
-	"github.com/willf/bloom"
 	"os"
 	"sync"
 )

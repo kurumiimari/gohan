@@ -87,9 +87,10 @@ func TestMasterExtendedKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(strings.Replace(tt.path.String(), "/", "-", -1), func(t *testing.T) {
+			SetCurrNetwork(tt.network)
 			mk := NewMasterExtendedKeyFromMnemonic(tt.mnemonic, tt.password, tt.network)
 			derived := DeriveExtendedKey(mk, tt.path...)
-			require.Equal(t, tt.address, derived.Address().String(tt.network))
+			require.Equal(t, tt.address, derived.Address().String())
 			require.Equal(t, tt.xPub, derived.PublicString())
 		})
 	}
