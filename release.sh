@@ -24,7 +24,7 @@ ssh gohan-builder <<EOF
   build_version="$build_version" make build-cross
 EOF
 
-ssh gohan-builder "ls -l /var/deploy/build/gohan/bin | grep '^-' | tr -s '' | cut -d ' ' -f 9" | while read line ; do
+ssh gohan-builder "find /var/deploy/build/gohan/bin -name 'gohan*' | | cut -d '/' -f 7" | while read line ; do
   scp gohan-builder:/var/deploy/build/gohan/bin/$line /tmp/$line
   gpg --default-key B8724012 --detach-sign --armor /tmp/$line
   scp /tmp/$line.asc gohan-builder:/var/deploy/build/gohan/bin/$line.asc
