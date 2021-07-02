@@ -339,14 +339,14 @@ func WriteDutchAuctionProof(auction *DutchAuction, w io.Writer) error {
 	j := auction.AsCanonical()
 
 	if _, err := w.Write([]byte(V1DutchAuctionMagic)); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	if _, err := w.Write([]byte("\n")); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	encoder := json.NewEncoder(w)
 	if err := encoder.Encode(j); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	return nil
 }

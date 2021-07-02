@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -118,11 +119,11 @@ var postDutchAuctionListingCmd = &cobra.Command{
 			return err
 		}
 
-		startPrice, err := promptFloat("Start Price (whole HNS):")
+		startPrice, err := promptFloat("Start Price (whole HNS)")
 		if err != nil {
 			return err
 		}
-		endPrice, err := promptFloat("End Price (whole HNS):")
+		endPrice, err := promptFloat("End Price (whole HNS)")
 		if err != nil {
 			return err
 		}
@@ -138,7 +139,7 @@ var postDutchAuctionListingCmd = &cobra.Command{
 			return err
 		}
 
-		shouldPost, err := promptBool("Post on ShakeDex web?")
+		shouldPost, err := promptBool("Post on ShakeDex web")
 		if err != nil {
 			return err
 		}
@@ -151,7 +152,7 @@ var postDutchAuctionListingCmd = &cobra.Command{
 				return err
 			}
 			if feeInfo.RatePercent > 0 {
-				confirmList, err := promptBool(fmt.Sprintf("A fee of %f%% will be applied. Continue?", feeInfo.RatePercent))
+				confirmList, err := promptBool(fmt.Sprintf("A fee of %f%% will be applied. Continue", feeInfo.RatePercent))
 				if err != nil {
 					return err
 				}
@@ -166,12 +167,12 @@ var postDutchAuctionListingCmd = &cobra.Command{
 		}
 
 		var presignLoc string
-		shouldWrite, err := promptBool("Do you want to write your presigns to disk?")
+		shouldWrite, err := promptBool("Do you want to write your presigns to disk")
 		if err != nil {
 			return err
 		}
 		if shouldWrite {
-			presignLoc, err = promptStr("Where do you want to store your presigns?", fmt.Sprintf("./%s.txt", name))
+			presignLoc, err = promptStr("Where do you want to store your presigns", fmt.Sprintf("./%s.txt", name))
 			if err != nil {
 				return err
 			}
@@ -191,13 +192,20 @@ var postDutchAuctionListingCmd = &cobra.Command{
 		}
 
 		if presignLoc != "" {
+			if strings.HasPrefix(presignLoc, "~") {
+				hd, err := os.UserHomeDir()
+				if err != nil {
+					return errors.WithStack(err)
+				}
+				presignLoc = strings.Replace(presignLoc, "~", hd, 1)
+			}
 			f, err := os.OpenFile(presignLoc, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 			if err != nil {
-				return err
+				return errors.WithStack(err)
 			}
 			defer f.Close()
 			if err := shakedex.WriteDutchAuctionProof(presigns, f); err != nil {
-				return err
+				return errors.WithStack(err)
 			}
 		}
 
@@ -384,11 +392,14 @@ func promptBool(label string) (bool, error) {
 		Label:     label,
 		IsConfirm: true,
 	}
-	strVal, err := prompt.Run()
+	_, err := prompt.Run()
+	if err == promptui.ErrAbort {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
-	return strVal == "y", nil
+	return true, nil
 }
 
 func validateFloat(s string) error {
@@ -401,7 +412,7 @@ func validateFloat(s string) error {
 
 func init() {
 	rootCmd.AddCommand(dutchAuctionsCmd)
-	dutchAuctionsCmd.PersistentFlags().StringVar(&shakedexURL, "shakedex-url", "https://www.shakedex.com/api", "URL to ShakeDex Web.")
+	dutchAuctionsCmd.PersistentFlags().StringVar(&shakedexURL, "shakedex-url", "https://www.shakedex.com", "URL to ShakeDex Web.")
 	dutchAuctionsCmd.AddCommand(transferDutchAuctionListingCmd)
 	dutchAuctionsCmd.AddCommand(finalizeDutchAuctionListingCmd)
 	dutchAuctionsCmd.AddCommand(postDutchAuctionListingCmd)

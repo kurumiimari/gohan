@@ -42,6 +42,10 @@ func (c *Client) FeeInfo() (*FeeInfo, error) {
 		return nil, err
 	}
 
+	if rawRes.Rate == 0 {
+		return NoFee, nil
+	}
+
 	ratePercent := rawRes.Rate / 100
 	addr, err := chain.NewAddressFromBech32(rawRes.Addr)
 	if err != nil {
@@ -54,7 +58,12 @@ func (c *Client) FeeInfo() (*FeeInfo, error) {
 }
 
 func (c *Client) UploadPresigns(auction *DutchAuction) error {
-	return c.doPost("api/v1/auctions", auction.AsCanonical(), nil)
+	req := struct {
+		Auction *CanonicalAuction `json:"auction"`
+	}{
+		Auction: auction.AsCanonical(),
+	}
+	return c.doPost("api/v1/auctions", req, nil)
 }
 
 func (c *Client) doGet(path string, resObj interface{}) error {

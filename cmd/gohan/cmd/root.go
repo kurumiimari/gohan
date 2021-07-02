@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"github.com/kurumiimari/gohan"
 	"github.com/kurumiimari/gohan/chain"
 	"github.com/kurumiimari/gohan/log"
@@ -20,9 +21,10 @@ var (
 var cmdLogger = log.ModuleLogger("cmd")
 
 var rootCmd = &cobra.Command{
-	Use:          "gohan",
-	Short:        "A Handshake wallet node",
-	SilenceUsage: true,
+	Use:           "gohan",
+	Short:         "A Handshake wallet node",
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		network, err := chain.NetworkFromName(network)
 		if err != nil {
@@ -53,8 +55,18 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&nodeURL, "node-url", "", "Sets an alternate URL to the Handshake full node.")
 }
 
+type causer interface {
+	Cause() error
+}
+
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
+		_, ok := err.(causer)
+		if ok {
+			fmt.Fprintf(os.Stderr, "%+v\n", err)
+		} else {
+			fmt.Println(err.Error())
+		}
 		os.Exit(1)
 	}
 }
