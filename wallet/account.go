@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	BlockFetchConcurrency = 5
+	BlockFetchConcurrency = 25
 )
 
 var (
