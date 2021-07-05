@@ -160,7 +160,7 @@ SELECT
 FROM coins
 INNER JOIN transactions AS txin ON txin.account_id = coins.account_id AND txin.hash = coins.tx_hash
 LEFT JOIN transactions AS txout ON txout.account_id = coins.account_id AND txout.hash = coins.spending_tx_hash
-AND coins.account_id = ?
+WHERE coins.account_id = ?
 AND tx_hash = ?
 AND out_idx = ?
 `,
